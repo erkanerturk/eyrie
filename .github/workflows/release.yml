@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Check version matches tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          grep -q "CFBundleShortVersionString: \"$VERSION\"" project.yml || {
+            echo "project.yml CFBundleShortVersionString does not match tag $GITHUB_REF_NAME" >&2
+            exit 1
+          }
+
+      - name: Build DMG
+        run: ./Scripts/make-dmg.sh
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/Eyrie-*.dmg \
+            --title "Eyrie $GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "The app is ad-hoc signed (not notarized): on first launch use right-click → Open, or run \`xattr -dr com.apple.quarantine /Applications/Eyrie.app\`."
