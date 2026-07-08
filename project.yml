@@ -1,0 +1,55 @@
+name: Eyrie
+options:
+  bundleIdPrefix: com.erkanerturk
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  EyrieCore:
+    path: Packages/EyrieCore
+  AwakeKit:
+    path: Packages/AwakeKit
+  FocusKit:
+    path: Packages/FocusKit
+  DisplayKit:
+    path: Packages/DisplayKit
+  AudioShareKit:
+    path: Packages/AudioShareKit
+
+targets:
+  Eyrie:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: EyrieCore
+      - package: AwakeKit
+      - package: FocusKit
+      - package: DisplayKit
+      - package: AudioShareKit
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Eyrie
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.utilities
+    entitlements:
+      path: App/Eyrie.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.erkanerturk.eyrie
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: false
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: false
+        SWIFT_STRICT_CONCURRENCY: complete
