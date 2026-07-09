@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Eyrie is a modular macOS 26+ menu bar app (SwiftUI, Liquid Glass). Four feature modules — AwakeKit (keep-awake), FocusKit (pomodoro), AudioShareKit (multi-device audio), DisplayKit (DDC/CI brightness) — live as local Swift Packages under `Packages/`, plus `EyrieCore` (shared protocol, services, glass UI components). The app target in `App/` is only a shell.
+Eyrie is a modular macOS 26+ menu bar app (SwiftUI, Liquid Glass). Six feature modules — AwakeKit (keep-awake), FocusKit (pomodoro), AudioShareKit (multi-device audio), DisplayKit (DDC/CI brightness), StatsKit (CPU/memory/network stats), NetKit (network identity) — live as local Swift Packages under `Packages/`, plus `EyrieCore` (shared protocol, services, glass UI components). The app target in `App/` is only a shell.
 
 ## Commands
 

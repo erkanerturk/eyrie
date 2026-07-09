@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/erkanerturk/eyrie)](https://github.com/erkanerturk/eyrie/releases)
 
-A modular macOS menu bar app built with SwiftUI and the macOS 26 (Tahoe) **Liquid Glass** design language. Eyrie bundles the core features of four popular utilities into a single menu bar panel, one module each:
+A modular macOS menu bar app built with SwiftUI and the macOS 26 (Tahoe) **Liquid Glass** design language. Eyrie bundles the core features of six popular utilities into a single menu bar panel, one module each:
 
 | Module | What it does |
 |---|---|
@@ -14,6 +14,8 @@ A modular macOS menu bar app built with SwiftUI and the macOS 26 (Tahoe) **Liqui
 | **Focus** (`FocusKit`) | Pomodoro timer with focus/break cycles, notifications, and a daily session counter |
 | **Audio Share** (`AudioShareKit`) | Plays audio on multiple Bluetooth devices simultaneously with per-device volume |
 | **Displays** (`DisplayKit`) | Controls external display brightness over DDC/CI |
+| **Stats** (`StatsKit`) | Live CPU, memory, and network throughput with sparkline history |
+| **Network** (`NetKit`) | Connection type, local and external IP, and optional Wi-Fi network name |
 
 ## Install
 
@@ -69,7 +71,9 @@ eyrie/
     ├── AwakeKit/
     ├── FocusKit/
     ├── AudioShareKit/
-    └── DisplayKit/
+    ├── DisplayKit/
+    ├── StatsKit/
+    └── NetKit/
 ```
 
 ### The module contract
@@ -128,6 +132,12 @@ All CoreAudio access lives in [CoreAudioSupport.swift](Packages/AudioShareKit/So
 Uses the same Apple Silicon route as MonitorControl/m1ddc: `DCPAVServiceProxy` IORegistry entries → `IOAVServiceCreateWithService` → raw DDC/CI packets via `IOAVServiceWriteI2C`/`ReadI2C` (declared with `@_silgen_name` in [DDCService.swift](Packages/DisplayKit/Sources/DisplayKit/DDCService.swift)). Displays are matched to services by comparing `CGDisplayCreateUUIDFromDisplayID` against the service's `EDID UUID` property, with a 1:1 fallback when exactly one of each is unmatched. All I2C traffic is serialized through the `DDCService` actor. Brightness is VCP code `0x10`; the max value is learned from the first successful read (assumed 100 if the monitor rejects reads).
 
 **These are private, unsupported APIs.** They can break on any macOS update and are the reason Eyrie targets **direct distribution only** — this app cannot ship on the App Store, and the sandbox is disabled in `project.yml`.
+
+### StatsKit
+Live CPU, memory, and network throughput. Raw counters come from public Mach/sysctl APIs (`host_cpu_load_info`, `host_statistics64`, interface byte counts) in [LiveSystemMetricsProvider.swift](Packages/StatsKit/Sources/StatsKit/LiveSystemMetricsProvider.swift); `MetricsMath` turns consecutive samples into percentages and rates. Sampling only runs while the panel is on screen (started/stopped from the panel's appear/disappear), so the module costs nothing when idle. History lives in a fixed-capacity `RingBuffer` rendered as sparklines.
+
+### NetKit
+Network identity card: connection type, local IP, external IP, and optional Wi-Fi SSID. An `NWPathMonitor` stream drives everything; the external IP is fetched lazily from public echo services with a 5-minute cache that's invalidated when the network identity changes. Like StatsKit, monitoring only runs while the panel is visible. Reading the SSID requires Location permission on modern macOS, so it's **opt-in** in the module's settings — `LiveSSIDProvider` owns the `CLLocationManager` flow and only touches CoreLocation/CoreWLAN after the user opts in.
 
 ## Constraints & conventions for contributors
 
