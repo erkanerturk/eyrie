@@ -5,6 +5,7 @@ import FocusKit
 import DisplayKit
 import AudioShareKit
 import StatsKit
+import NetKit
 
 /// Owns all feature modules and which of them are enabled. Adding a module to
 /// the app means appending one entry to `modules` here.
@@ -26,6 +27,7 @@ final class ModuleRegistry {
             AudioShareModule(),
             DisplayModule(),
             StatsModule(),
+            NetModule(),
         ]
         if let stored = UserDefaults.standard.stringArray(forKey: Self.enabledKey) {
             enabledIDs = Set(stored)

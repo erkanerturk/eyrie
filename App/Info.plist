@@ -24,5 +24,9 @@
 	<string>public.app-category.utilities</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSLocationUsageDescription</key>
+	<string>Eyrie uses your location permission only to read the current Wi-Fi network name.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Eyrie uses your location permission only to read the current Wi-Fi network name.</string>
 </dict>
 </plist>

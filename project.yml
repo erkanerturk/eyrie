@@ -18,6 +18,8 @@ packages:
     path: Packages/AudioShareKit
   StatsKit:
     path: Packages/StatsKit
+  NetKit:
+    path: Packages/NetKit
 
 targets:
   Eyrie:
@@ -32,6 +34,7 @@ targets:
       - package: DisplayKit
       - package: AudioShareKit
       - package: StatsKit
+      - package: NetKit
     info:
       path: App/Info.plist
       properties:
@@ -40,6 +43,8 @@ targets:
         CFBundleVersion: "1"
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.utilities
+        NSLocationUsageDescription: Eyrie uses your location permission only to read the current Wi-Fi network name.
+        NSLocationWhenInUseUsageDescription: Eyrie uses your location permission only to read the current Wi-Fi network name.
     entitlements:
       path: App/Eyrie.entitlements
       properties:
