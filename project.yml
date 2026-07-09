@@ -16,6 +16,8 @@ packages:
     path: Packages/DisplayKit
   AudioShareKit:
     path: Packages/AudioShareKit
+  StatsKit:
+    path: Packages/StatsKit
 
 targets:
   Eyrie:
@@ -29,6 +31,7 @@ targets:
       - package: FocusKit
       - package: DisplayKit
       - package: AudioShareKit
+      - package: StatsKit
     info:
       path: App/Info.plist
       properties:
