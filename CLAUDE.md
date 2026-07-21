@@ -37,7 +37,7 @@ swift Scripts/generate-appicon.swift             # regenerate AppIcon assets
 ./Scripts/make-dmg.sh                            # Release build + dist/Eyrie-<version>.dmg
 ```
 
-Release steps are in `RELEASING.md`.
+Release steps are in `Docs/RELEASING.md`.
 
 ## Architecture
 
