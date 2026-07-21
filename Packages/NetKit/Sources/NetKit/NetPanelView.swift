@@ -70,7 +70,7 @@ struct NetPanelView: View {
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     // Tuck under the value, clear of the copy button.
-                    .padding(.trailing, 28)
+                    .padding(.trailing, 24)
             }
         }
     }
@@ -172,7 +172,8 @@ private struct CopyableRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
-            GlassIconButton(symbolName: copied ? "checkmark" : "document.on.document") {
+            GlassIconButton(symbolName: copied ? "checkmark" : "document.on.document",
+                            size: .compact) {
                 copy()
             }
             .disabled(value == nil)

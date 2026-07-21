@@ -45,19 +45,32 @@ public struct ModuleCard<Content: View, Accessory: View>: View {
 
 /// Compact glass capsule button used for secondary actions inside cards.
 public struct GlassIconButton: View {
+    /// Standard control size, and a smaller variant for buttons that sit on a
+    /// caption-height text row — at 22 pt the button, not the text, sets the
+    /// row height and the surrounding stack spacing reads as a gap.
+    public enum Size {
+        case regular
+        case compact
+
+        var side: CGFloat { self == .regular ? 22 : 18 }
+        var symbolSize: CGFloat { self == .regular ? 12 : 10 }
+    }
+
     private let symbolName: String
+    private let size: Size
     private let action: () -> Void
 
-    public init(symbolName: String, action: @escaping () -> Void) {
+    public init(symbolName: String, size: Size = .regular, action: @escaping () -> Void) {
         self.symbolName = symbolName
+        self.size = size
         self.action = action
     }
 
     public var body: some View {
         Button(action: action) {
             Image(systemName: symbolName)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 22, height: 22)
+                .font(.system(size: size.symbolSize, weight: .semibold))
+                .frame(width: size.side, height: size.side)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
