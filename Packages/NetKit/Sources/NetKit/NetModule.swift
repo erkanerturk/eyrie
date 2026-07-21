@@ -101,7 +101,9 @@ public final class NetModule: EyrieModule {
     @ObservationIgnored private let pinger: any Pinging
     @ObservationIgnored private var qualityTask: Task<Void, Never>?
     @ObservationIgnored private var qualityTickIndex = 0
-    @ObservationIgnored private let defaults = UserDefaults.standard
+    /// Injectable so tests never write through the toggles' `didSet` into the
+    /// real app's preferences.
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let logger = Logger(subsystem: "com.erkanerturk.eyrie", category: "Net")
 
     private static let showSSIDKey = "net.showSSID"
@@ -126,8 +128,10 @@ public final class NetModule: EyrieModule {
         captiveChecker: any CaptivePortalChecking = LiveCaptivePortalChecker(),
         exposedServicesProvider: any ExposedServicesProviding = LiveExposedServicesProvider(),
         pinger: any Pinging = PingService(),
+        defaults: UserDefaults = .standard,
         now: @escaping () -> Date = Date.init
     ) {
+        self.defaults = defaults
         self.pathMonitor = pathMonitor
         self.externalIPFetcher = externalIPFetcher
         self.ssidProvider = ssidProvider
@@ -339,7 +343,11 @@ public final class NetModule: EyrieModule {
         if trust == .untrusted || firewallState == .disabled {
             refreshExposedServicesIfNeeded()
         } else {
+            // Dropping the result must drop its TTL stamp too, or trust falling
+            // back to untrusted inside the window finds an empty list and
+            // reports no exposed services at all.
             exposedServices = []
+            exposedServicesCheckedAt = nil
         }
         let findings = SecurityAdvisor.findings(
             trust: trust,

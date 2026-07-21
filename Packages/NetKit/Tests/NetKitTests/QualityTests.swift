@@ -107,7 +107,8 @@ struct NetModuleQualityTests {
             vpnProvider: StubVPNProvider(),
             firewallProvider: ScriptedFirewallProvider(),
             captiveChecker: ScriptedCaptiveChecker(),
-            pinger: pinger
+            pinger: pinger,
+            defaults: temporaryDefaults()
         )
         module.showQuality = true
         return module

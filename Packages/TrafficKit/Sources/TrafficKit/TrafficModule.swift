@@ -32,6 +32,10 @@ public final class TrafficModule: EyrieModule {
                 perAppUnavailable = false
                 previousFrame = nil
                 previousFrameAt = nil
+                // Must go with the frames: a later `topCount` change calls
+                // recomputeTopConsumers(), which would otherwise rebuild the
+                // list from rates measured before the toggle.
+                latestRates = []
             }
         }
     }
@@ -60,15 +64,19 @@ public final class TrafficModule: EyrieModule {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     @ObservationIgnored private var backgroundTask: Task<Void, Never>?
-    /// The registry pins this right after init; assume enabled until told.
-    @ObservationIgnored private var isModuleEnabled = true
+    /// Pinned by the registry's `setModuleEnabled(_:)` right after init, which
+    /// is also what starts the background loop — init deliberately doesn't,
+    /// since it cannot yet know whether the user disabled this module.
+    @ObservationIgnored private var isModuleEnabled = false
     @ObservationIgnored private var latestRates: [ProcessTrafficRate] = []
     @ObservationIgnored private var previousFrame: [ProcessTraffic]?
     @ObservationIgnored private var previousFrameAt: Date?
     /// pid → localized app name. Resolving this per row per render made the
     /// panel do workspace lookups on every observable change.
     @ObservationIgnored private var displayNames: [Int32: String] = [:]
-    @ObservationIgnored private let defaults = UserDefaults.standard
+    /// Injectable so tests never write through the toggles' `didSet` into the
+    /// real app's preferences.
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let logger = Logger(subsystem: "com.erkanerturk.eyrie", category: "Traffic")
 
     private static let showPerAppKey = "traffic.showPerApp"
@@ -82,17 +90,19 @@ public final class TrafficModule: EyrieModule {
         sampler: any ProcessTrafficSampling = LiveNettopSampler(),
         readCounters: @escaping @Sendable () throws -> [InterfaceCounters] = { try NetworkInterfaceCounters.read() },
         usageStore: DailyUsageStore? = nil,
+        defaults: UserDefaults = .standard,
         now: @escaping () -> Date = Date.init
     ) {
         self.sampler = sampler
         self.readCounters = readCounters
-        self.usageStore = usageStore ?? DailyUsageStore()
+        self.defaults = defaults
+        self.usageStore = usageStore ?? DailyUsageStore(defaults: defaults)
         self.now = now
         showPerApp = defaults.object(forKey: Self.showPerAppKey) as? Bool ?? true
         topCount = defaults.object(forKey: Self.topCountKey) as? Int ?? 5
         backgroundTracking = defaults.object(forKey: Self.backgroundTrackingKey) as? Bool ?? false
         backgroundIntervalMinutes = defaults.object(forKey: Self.backgroundIntervalKey) as? Int ?? 20
-        syncBackgroundLoop()
+        // No syncBackgroundLoop() here on purpose — see `isModuleEnabled`.
     }
 
     /// Idempotent; called from the panel's onAppear. One loop drives both the
@@ -205,7 +215,10 @@ public final class TrafficModule: EyrieModule {
         guard isModuleEnabled, backgroundTracking else { return }
         let interval = TimeInterval(backgroundIntervalMinutes * 60)
         backgroundTask = Task { [weak self] in
-            // Immediate baseline so the first interval's delta is attributable.
+            // Immediate baseline so the first interval's delta is attributable
+            // — but only if this task outlived the hop onto the actor; a
+            // module disabled in the meantime must read nothing at all.
+            guard !Task.isCancelled else { return }
             self?.backgroundIngest()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(interval), tolerance: .seconds(120))

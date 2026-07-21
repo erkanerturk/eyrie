@@ -83,13 +83,16 @@ struct NetPanelView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            if module.qualityHistory.isEmpty {
+            // Materialized once: `elements` rebuilds the whole 60-sample
+            // window, and the tone and the text both need it.
+            let samples = module.qualityHistory.elements
+            if samples.isEmpty {
                 Text("Measuring…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                StatusDot(qualityTone)
-                Text(qualityText)
+                StatusDot(QualityVerdict.tone(for: samples))
+                Text(qualityText(samples))
                     .font(.caption.weight(.medium))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -97,16 +100,9 @@ struct NetPanelView: View {
         }
     }
 
-    private var qualityTone: StatusTone {
-        QualityVerdict.tone(for: module.qualityHistory.elements)
-    }
-
-    private var qualityText: String {
-        let samples = module.qualityHistory.elements
-        let internet = samples.map(\.internetLatency)
-        let median = PingStats.medianLatency(internet)
-            ?? PingStats.medianLatency(samples.map(\.gatewayLatency))
-        let loss = PingStats.lossFraction(internet) ?? 0
+    private func qualityText(_ samples: [QualitySample]) -> String {
+        let median = PingStats.effectiveMedian(samples)
+        let loss = PingStats.lossFraction(samples.map(\.internetLatency)) ?? 0
         let latencyText = median.map { "\(Int(($0 * 1000).rounded())) ms" } ?? "—"
         return "\(latencyText) · \(Int((loss * 100).rounded()))% loss"
     }

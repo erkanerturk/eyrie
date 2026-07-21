@@ -71,7 +71,10 @@ public enum ListeningPortsParser {
         return Int(address[address.index(after: separator)...])
     }
 
+    /// Strictly loopback. Link-local (`fe80:`) deliberately does NOT count —
+    /// every device on the same segment can reach it, which is exactly the
+    /// finding this provider exists to report.
     private static func isLoopback(_ address: String) -> Bool {
-        address.hasPrefix("127.") || address.hasPrefix("::1.") || address.hasPrefix("fe80:")
+        address.hasPrefix("127.") || address.hasPrefix("::1.")
     }
 }

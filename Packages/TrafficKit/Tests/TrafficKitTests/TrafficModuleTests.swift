@@ -10,14 +10,15 @@ struct TrafficModuleTests {
         counters: [InterfaceCounters] = [interface("en0", in: 1000, out: 500)],
         clock: FakeClock = FakeClock()
     ) -> TrafficModule {
+        let defaults = temporaryDefaults()
         let module = TrafficModule(
             sampler: sampler,
             readCounters: { counters },
-            usageStore: DailyUsageStore(defaults: temporaryDefaults(), now: { clock.now }),
+            usageStore: DailyUsageStore(defaults: defaults, now: { clock.now }),
+            defaults: defaults,
             now: { clock.now }
         )
-        // Init reads UserDefaults.standard, which sibling tests write through
-        // toggle didSets — pin what this suite depends on.
+        // Suite-local defaults, so these writes never reach the real app.
         module.showPerApp = true
         module.topCount = 5
         return module
@@ -138,11 +139,7 @@ struct TrafficModuleTests {
     /// it must not keep reading counters in the background.
     @Test func aDisabledModuleRunsNoBackgroundWork() async {
         let reads = CallCounter()
-        let module = TrafficModule(
-            sampler: ScriptedSampler(),
-            readCounters: { reads.increment(); return [interface("en0", in: 1, out: 1)] },
-            usageStore: DailyUsageStore(defaults: temporaryDefaults())
-        )
+        let module = makeBackgroundModule(reads: reads)
         module.setModuleEnabled(false)
         module.backgroundTracking = true
         for _ in 0..<20 { await Task.yield() }
@@ -154,5 +151,38 @@ struct TrafficModuleTests {
             await Task.yield()
         }
         #expect(reads.value >= 1)
+    }
+
+    /// Init cannot know the module's enabled state yet, so it must not start
+    /// the loop at all — the registry's `setModuleEnabled(_:)` does. Before,
+    /// init started it optimistically and the task's unguarded baseline read
+    /// ran even though the registry cancelled it on the very next line.
+    @Test func initStartsNoBackgroundWorkBeforeTheRegistryPinsTheState() async {
+        let reads = CallCounter()
+        let defaults = temporaryDefaults()
+        defaults.set(true, forKey: "traffic.backgroundTracking")
+        let module = makeBackgroundModule(reads: reads, defaults: defaults)
+        #expect(module.backgroundTracking)
+
+        for _ in 0..<20 { await Task.yield() }
+        #expect(reads.value == 0)
+
+        // …and the registry switching it on is what actually starts it.
+        module.setModuleEnabled(true)
+        for _ in 0..<50 where reads.value == 0 {
+            await Task.yield()
+        }
+        #expect(reads.value >= 1)
+    }
+
+    private func makeBackgroundModule(
+        reads: CallCounter, defaults: UserDefaults = temporaryDefaults()
+    ) -> TrafficModule {
+        TrafficModule(
+            sampler: ScriptedSampler(),
+            readCounters: { reads.increment(); return [interface("en0", in: 1, out: 1)] },
+            usageStore: DailyUsageStore(defaults: defaults),
+            defaults: defaults
+        )
     }
 }

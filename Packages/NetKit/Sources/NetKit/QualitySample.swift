@@ -33,6 +33,14 @@ public enum PingStats {
         let lost = latencies.count(where: { $0 == nil })
         return Double(lost) / Double(latencies.count)
     }
+
+    /// The median the app reports: the internet anchor when it answered at
+    /// all, otherwise the gateway. Single definition so the quality dot's
+    /// verdict and the number printed beside it can never disagree.
+    public static func effectiveMedian(_ samples: [QualitySample]) -> TimeInterval? {
+        medianLatency(samples.map(\.internetLatency))
+            ?? medianLatency(samples.map(\.gatewayLatency))
+    }
 }
 
 /// Pure: turns a sample window into the app-wide status vocabulary, so the
@@ -45,13 +53,11 @@ public enum QualityVerdict {
 
     public static func tone(for samples: [QualitySample]) -> StatusTone {
         guard !samples.isEmpty else { return .inactive }
-        let internet = samples.map(\.internetLatency)
-        let loss = PingStats.lossFraction(internet) ?? 0
-        // Fall back to the gateway when the internet anchor is unreachable —
+        let loss = PingStats.lossFraction(samples.map(\.internetLatency)) ?? 0
+        // Falls back to the gateway when the internet anchor is unreachable —
         // a dead 1.1.1.1 with a healthy gateway is still a real problem, so
         // loss alone decides in that case.
-        let median = PingStats.medianLatency(internet)
-            ?? PingStats.medianLatency(samples.map(\.gatewayLatency))
+        let median = PingStats.effectiveMedian(samples)
 
         if loss >= criticalLoss { return .critical }
         if let median, median >= criticalLatency { return .critical }

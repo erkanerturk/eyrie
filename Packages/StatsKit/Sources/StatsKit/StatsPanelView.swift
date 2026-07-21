@@ -109,15 +109,17 @@ private struct MetricRow<Graph: View>: View {
     var value: String
     var indicator: StatusTone?
     var showsGraph: Bool
-    @ViewBuilder var graph: Graph
+    /// Held unevaluated: building a `Sparkline` means mapping the whole 60
+    /// sample history, and that must not happen when the graph is hidden.
+    var graph: () -> Graph
 
     init(label: String, value: String, indicator: StatusTone? = nil, showsGraph: Bool = true,
-         @ViewBuilder graph: () -> Graph) {
+         @ViewBuilder graph: @escaping () -> Graph) {
         self.label = label
         self.value = value
         self.indicator = indicator
         self.showsGraph = showsGraph
-        self.graph = graph()
+        self.graph = graph
     }
 
     var body: some View {
@@ -137,7 +139,7 @@ private struct MetricRow<Graph: View>: View {
                     .minimumScaleFactor(0.7)
             }
             if showsGraph {
-                graph
+                graph()
             }
         }
     }

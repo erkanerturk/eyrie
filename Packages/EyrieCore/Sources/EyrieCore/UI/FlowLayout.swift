@@ -13,22 +13,42 @@ public struct FlowLayout: Layout {
         self.lineSpacing = lineSpacing
     }
 
-    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    /// Subviews are measured once per layout pass and the resulting rows are
+    /// reused: `sizeThatFits` and `placeSubviews` are called back to back with
+    /// the same width, and re-measuring in each (plus again while placing) cost
+    /// four `sizeThatFits` calls per badge.
+    public struct Cache {
+        var sizes: [CGSize] = []
+        var rows: [Row] = []
+        var rowsWidth: CGFloat = .nan
+    }
+
+    public func makeCache(subviews: Subviews) -> Cache {
+        Cache(sizes: subviews.map { $0.sizeThatFits(.unspecified) })
+    }
+
+    public func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        cache.sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        cache.rows = []
+        cache.rowsWidth = .nan
+    }
+
+    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
-        let rows = layout(subviews: subviews, maxWidth: maxWidth)
+        let rows = rows(in: &cache, maxWidth: maxWidth)
         let height = rows.reduce(0) { $0 + $1.height } +
             lineSpacing * CGFloat(max(0, rows.count - 1))
         let width = rows.map(\.width).max() ?? 0
         return CGSize(width: min(width, maxWidth), height: height)
     }
 
-    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = layout(subviews: subviews, maxWidth: bounds.width)
+    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let rows = rows(in: &cache, maxWidth: bounds.width)
         var y = bounds.minY
         for row in rows {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = cache.sizes[index]
                 subviews[index].place(
                     at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
                     proposal: ProposedViewSize(size)
@@ -39,17 +59,25 @@ public struct FlowLayout: Layout {
         }
     }
 
-    private struct Row {
+    public struct Row {
         var indices: [Int] = []
         var width: CGFloat = 0
         var height: CGFloat = 0
     }
 
-    private func layout(subviews: Subviews, maxWidth: CGFloat) -> [Row] {
+    private func rows(in cache: inout Cache, maxWidth: CGFloat) -> [Row] {
+        if cache.rowsWidth == maxWidth { return cache.rows }
+        let rows = layout(sizes: cache.sizes, maxWidth: maxWidth)
+        cache.rows = rows
+        cache.rowsWidth = maxWidth
+        return rows
+    }
+
+    private func layout(sizes: [CGSize], maxWidth: CGFloat) -> [Row] {
         var rows: [Row] = []
         var current = Row()
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+        for index in sizes.indices {
+            let size = sizes[index]
             let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
             if !current.indices.isEmpty, needed > maxWidth {
                 rows.append(current)

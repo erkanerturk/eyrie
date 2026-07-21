@@ -29,6 +29,16 @@ struct ListeningPortsParserTests {
         #expect(!ListeningPortsParser.services(in: sample).contains { $0.port == 445 })
     }
 
+    /// Link-local is not loopback: every device on the same segment can reach
+    /// it, which is exactly what this parser exists to surface.
+    @Test func linkLocalServicesAreExposed() {
+        let linkLocal = """
+        tcp6       0      0  fe80::1cf%en0.5900     *.*                    LISTEN
+        """
+        #expect(ListeningPortsParser.services(in: linkLocal)
+            == [ExposedService(port: 5900, name: "Screen Sharing")])
+    }
+
     @Test func ephemeralPortsAreIgnored() {
         #expect(!ListeningPortsParser.services(in: sample).contains { $0.port == 63826 })
     }

@@ -203,3 +203,13 @@ func ethernetSnapshot(interface: String = "en5", ipv4: String? = "192.168.1.50")
 }
 
 let offlineSnapshot = NetworkSnapshot(kind: .offline)
+
+/// Fresh suite-backed defaults per test, wiped on creation so reruns start
+/// clean and the module's toggle `didSet`s never touch the real app's
+/// preferences (self-cleaning rule).
+func temporaryDefaults(_ token: String = UUID().uuidString) -> UserDefaults {
+    let name = "netkit-tests-\(token)"
+    let defaults = UserDefaults(suiteName: name)!
+    defaults.removePersistentDomain(forName: name)
+    return defaults
+}

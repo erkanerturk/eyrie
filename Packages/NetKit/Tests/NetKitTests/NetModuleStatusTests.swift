@@ -47,10 +47,10 @@ struct NetModuleStatusTests {
             firewallProvider: firewallProvider,
             captiveChecker: captiveChecker,
             exposedServicesProvider: exposedProvider,
+            defaults: temporaryDefaults(),
             now: { clock.now }
         )
-        // Init reads UserDefaults.standard, which sibling tests write through
-        // toggle didSets — pin the state this suite depends on.
+        // Suite-local defaults, so these writes never reach the real app.
         module.showStatusBadges = true
         module.showSecurityWarnings = false
         return Harness(module: module, vpnProvider: vpnProvider, firewall: firewallProvider,
@@ -197,6 +197,7 @@ struct NetModuleSecurityTests {
             firewallProvider: ScriptedFirewallProvider(firewall),
             captiveChecker: ScriptedCaptiveChecker(captive),
             exposedServicesProvider: exposed,
+            defaults: temporaryDefaults(),
             now: { clock.now }
         )
         module.showStatusBadges = true
@@ -242,6 +243,34 @@ struct NetModuleSecurityTests {
 
         #expect(exposed.callCount == 1)
         #expect(module.securityFindings.first { $0.id == "firewall-off" }?.tone == .caution)
+    }
+
+    /// Dropping the scan result on a trusted network used to leave its TTL
+    /// stamp behind, so trust falling back inside the 60 s window found an
+    /// empty list and reported no exposed services at all.
+    @Test func trustFallingBackInsideTheTTLRescans() async {
+        let exposed = ScriptedExposedServicesProvider([ExposedService(port: 5900, name: "Screen Sharing")])
+        let clock = FakeClock()
+        let module = makeModule(exposed: exposed, wifi: stubWiFiDetails(isOpen: true), clock: clock)
+        module.apply(wifiSnapshot())
+        await settle(module)
+        #expect(exposed.callCount == 1)
+        #expect(module.securityFindings.contains { $0.id == "exposed-services" })
+
+        // Same panel session, now a trusted network: the list is dropped.
+        module.showWiFiDetails = false
+        module.apply(ethernetSnapshot())
+        await settle(module)
+        #expect(module.exposedServices.isEmpty)
+
+        // Back to the open network well inside the TTL — the warning must
+        // come back rather than stay silently empty.
+        clock.advance(by: 5)
+        module.showWiFiDetails = true
+        module.apply(wifiSnapshot())
+        await settle(module)
+        #expect(exposed.callCount == 2)
+        #expect(module.securityFindings.contains { $0.id == "exposed-services" })
     }
 
     @Test func turningWarningsOffClearsFindings() async {

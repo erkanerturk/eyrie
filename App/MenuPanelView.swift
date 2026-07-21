@@ -133,8 +133,11 @@ private struct ScrollHintBadge: View {
                     )
                 )
                 // Tall enough to veil several cards, so the cue reads as "there
-                // is more below" rather than an edge treatment.
-                .frame(height: 400)
+                // is more below" rather than an edge treatment — but capped by
+                // the scroll view's own height, since an overlay is neither
+                // clipped to its parent nor allowed to grow it. A fixed 400 pt
+                // painted over the header on short screens.
+                .frame(maxHeight: 400)
                 .overlay {
                     VStack(spacing: 8) {
                         Image(systemName: "chevron.down")

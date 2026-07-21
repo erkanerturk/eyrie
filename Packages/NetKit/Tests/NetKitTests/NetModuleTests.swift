@@ -78,8 +78,8 @@ struct NetModuleTests {
 
     @Test func deniedAuthorizationNeverExposesSSID() {
         let provider = StubSSIDProvider(status: .denied, ssid: "ShouldNotAppear")
-        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider)
-        defer { module.showSSID = false }
+        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider,
+                                defaults: temporaryDefaults())
 
         module.showSSID = true
         module.apply(wifiSnapshot())
@@ -89,8 +89,8 @@ struct NetModuleTests {
 
     @Test func authorizedWifiShowsSSIDButEthernetDoesNot() {
         let provider = StubSSIDProvider(status: .authorized, ssid: "HomeNet")
-        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider)
-        defer { module.showSSID = false }
+        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider,
+                                defaults: temporaryDefaults())
 
         module.showSSID = true
         module.apply(wifiSnapshot())
@@ -102,8 +102,8 @@ struct NetModuleTests {
 
     @Test func enablingToggleRequestsAuthorizationOnce() {
         let provider = StubSSIDProvider(status: .notDetermined, ssid: "HomeNet")
-        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider)
-        defer { module.showSSID = false }
+        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider,
+                                defaults: temporaryDefaults())
 
         module.apply(wifiSnapshot())
         module.showSSID = true
@@ -119,8 +119,8 @@ struct NetModuleTests {
 
     @Test func disablingToggleHidesSSID() {
         let provider = StubSSIDProvider(status: .authorized, ssid: "HomeNet")
-        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider)
-        defer { module.showSSID = false }
+        let module = NetModule(externalIPFetcher: ScriptedFetcher(), ssidProvider: provider,
+                                defaults: temporaryDefaults())
 
         module.showSSID = true
         module.apply(wifiSnapshot())

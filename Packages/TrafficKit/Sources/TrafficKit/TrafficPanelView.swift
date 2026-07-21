@@ -87,7 +87,11 @@ struct TrafficPanelView: View {
         return "↓ \(down)  ↑ \(up)"
     }
 
+    /// `Int64(Double)` traps on NaN, infinity and anything outside Int64's
+    /// range, so bound the value first — the totals above use
+    /// `Int64(clamping:)` for the same reason.
     private static func rate(_ bytesPerSecond: Double) -> String {
-        Int64(bytesPerSecond).formatted(.byteCount(style: .memory)) + "/s"
+        let bounded = bytesPerSecond.isFinite ? min(max(bytesPerSecond, 0), 1e18) : 0
+        return Int64(bounded).formatted(.byteCount(style: .memory)) + "/s"
     }
 }
