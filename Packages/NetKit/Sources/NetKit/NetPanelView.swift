@@ -5,6 +5,10 @@ import SwiftUI
 struct NetPanelView: View {
     @Bindable var module: NetModule
 
+    /// Width of the trailing column every detail row ends with — the compact
+    /// `GlassIconButton` side, so copy buttons and status dots line up.
+    static let trailingSlotWidth: CGFloat = 18
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if module.showStatusBadges {
@@ -90,14 +94,31 @@ struct NetPanelView: View {
                 Text("Measuring…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                trailingDot(nil)
             } else {
-                StatusDot(QualityVerdict.tone(for: samples))
                 Text(qualityText(samples))
                     .font(.caption.weight(.medium))
                     .monospacedDigit()
                     .lineLimit(1)
+                trailingDot(QualityVerdict.tone(for: samples))
             }
         }
+    }
+
+    /// The dot sits at the trailing edge, centred in a slot as wide as the
+    /// compact copy button so dots and copy icons share one column. Rows
+    /// without a tone keep the slot empty, so every value ends on the same x.
+    private func trailingDot(_ tone: StatusTone?) -> some View {
+        Group {
+            if let tone {
+                StatusDot(tone)
+            } else {
+                // A real view, not EmptyView — layout drops EmptyView and the
+                // frame below would collapse with it.
+                Color.clear.frame(width: 6, height: 6)
+            }
+        }
+        .frame(width: NetPanelView.trailingSlotWidth)
     }
 
     private func qualityText(_ samples: [QualitySample]) -> String {
@@ -114,15 +135,13 @@ struct NetPanelView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            if let tone {
-                StatusDot(tone)
-            }
             Text(value)
                 .font(.caption.weight(.medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .minimumScaleFactor(0.8)
+            trailingDot(tone)
         }
     }
 
@@ -173,6 +192,10 @@ private struct CopyableRow: View {
                 copy()
             }
             .disabled(value == nil)
+            // The glass style pads past the 18 pt icon frame; pinning the
+            // button into the shared slot centres it on the status dots
+            // instead of letting its padding push it off-column.
+            .frame(width: NetPanelView.trailingSlotWidth)
         }
     }
 
