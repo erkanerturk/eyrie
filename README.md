@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/erkanerturk/eyrie)](https://github.com/erkanerturk/eyrie/releases)
 
-A modular macOS menu bar app built with SwiftUI and the macOS 26 (Tahoe) **Liquid Glass** design language. Eyrie bundles the core features of six popular utilities into a single menu bar panel, one module each:
+A modular macOS menu bar app built with SwiftUI and the macOS 26 (Tahoe) **Liquid Glass** design language. Eyrie bundles the core features of seven popular utilities into a single menu bar panel, one module each:
 
 | Module | What it does |
 |---|---|
@@ -15,7 +15,8 @@ A modular macOS menu bar app built with SwiftUI and the macOS 26 (Tahoe) **Liqui
 | **Audio Share** (`AudioShareKit`) | Plays audio on multiple Bluetooth devices simultaneously with per-device volume |
 | **Displays** (`DisplayKit`) | Controls external display brightness over DDC/CI |
 | **Stats** (`StatsKit`) | Live CPU, memory, and network throughput with sparkline history |
-| **Network** (`NetKit`) | Connection type, local and external IP, and optional Wi-Fi network name |
+| **Network** (`NetKit`) | Connection type, IPs, VPN/DNS/firewall status badges, Wi-Fi signal details, and ping latency + loss |
+| **Traffic** (`TrafficKit`) | Per-app network usage (top consumers), interface totals since boot, and a per-day tally |
 
 ## Install
 
@@ -73,7 +74,8 @@ eyrie/
     ├── AudioShareKit/
     ├── DisplayKit/
     ├── StatsKit/
-    └── NetKit/
+    ├── NetKit/
+    └── TrafficKit/
 ```
 
 ### The module contract
@@ -101,6 +103,11 @@ Modules are `@Observable` classes; views observe them directly, so `isActive` fl
 - **`PowerAssertionService`** — single owner of IOKit power assertions (`IOPMAssertionCreateWithName`). Token-based, so AwakeKit and FocusKit ("keep awake during focus") can hold assertions independently without stepping on each other.
 - **`NotificationService`** — `UNUserNotificationCenter` wrapper; requests authorization lazily on first send.
 - **`ModuleCard` / `GlassIconButton`** — the shared Liquid Glass visual language. All module panels render inside a `ModuleCard`, so new modules look native for free.
+- **`RingBuffer` / `Sparkline`** — fixed-capacity history + the compact Charts view that renders it. `Sparkline`'s auto-scale floor is tunable per unit (`autoDomainFloor`).
+- **`StatusTone` / `StatusDot`** — one vocabulary for "how is this doing" (normal / caution / critical / inactive) and the 6 pt dot that shows it, so a memory-pressure warning, a bad-latency warning and an open-Wi-Fi warning all read the same.
+- **`FlowLayout`** — wrapping row layout for badge strips on the fixed-width panel.
+- **`ProcessRunner`** — one-shot subprocess runner with a timeout kill, for short absolute-path tool invocations (`socketfilterfw`, `netstat`, `nettop`).
+- **`NetworkInterfaceCounters`** — per-interface 64-bit byte counters via sysctl `NET_RT_IFLIST2`, with names resolved from the trailing `sockaddr_dl`. StatsKit sums them; TrafficKit tracks them per interface.
 
 ### Adding a new module
 
@@ -137,7 +144,19 @@ Uses the same Apple Silicon route as MonitorControl/m1ddc: `DCPAVServiceProxy` I
 Live CPU, memory, and network throughput. Raw counters come from public Mach/sysctl APIs (`host_cpu_load_info`, `host_statistics64`, interface byte counts) in [LiveSystemMetricsProvider.swift](Packages/StatsKit/Sources/StatsKit/LiveSystemMetricsProvider.swift); `MetricsMath` turns consecutive samples into percentages and rates. Sampling only runs while the panel is on screen (started/stopped from the panel's appear/disappear), so the module costs nothing when idle. History lives in a fixed-capacity `RingBuffer` rendered as sparklines.
 
 ### NetKit
-Network identity card: connection type, local IP, external IP, and optional Wi-Fi SSID. An `NWPathMonitor` stream drives everything; the external IP is fetched lazily from public echo services with a 5-minute cache that's invalidated when the network identity changes. Like StatsKit, monitoring only runs while the panel is visible. Reading the SSID requires Location permission on modern macOS, so it's **opt-in** in the module's settings — `LiveSSIDProvider` owns the `CLLocationManager` flow and only touches CoreLocation/CoreWLAN after the user opts in.
+Network identity + status + quality card. An `NWPathMonitor` stream drives everything; the external IP is fetched lazily from public echo services with a 5-minute cache that's invalidated when the network identity changes. Like StatsKit, monitoring only runs while the panel is visible.
+
+- **Status badges** — a single wrapping strip that doubles as the card header: connection type, VPN (SystemConfiguration: any configured VPN/PPP/IPSec service via `SCNetworkConnection` status + a tunnel-interface primary route — vendor-agnostic, and bare `utun` presence is deliberately *not* a signal since idle Macs carry dozens), firewall (`socketfilterfw --getglobalstate`), weak/open Wi-Fi, and captive-portal / no-internet detection (Apple's `hotspot-detect.html` probe over plain HTTP with redirects refused — the scoped ATS exception in `project.yml` exists for exactly this). Each probe owns an independent task and 60 s TTL, so a slow network check can never swallow the instant firewall read.
+- **Security warnings** — on an untrusted network (open or WEP/WPA1 encryption, or a captive portal) the card lists what to act on: unencrypted link, firewall off, no VPN, and sharing services other devices can reach (`netstat` LISTEN on non-loopback, mapped to well-known ports only). All signals are definitive-only — a redacted security type never raises an alarm — and the netstat scan runs *only* when the network is untrusted or the firewall is off, so a trusted network spawns nothing.
+- **DNS row** — resolvers from `State:/Network/Global/DNS`, classified as router-default / known public provider / custom.
+- **Connection quality** — ICMP echo to the gateway and `1.1.1.1` every 2 s over an unprivileged `SOCK_DGRAM` socket (no root, no entitlement; pure packet framing in `ICMPPacket`, blocking I/O confined to the `PingService` actor). Median latency + loss % over a 60-sample `RingBuffer`, shown as one line whose `StatusDot` carries the verdict.
+- **Wi-Fi details** — RSSI/SNR grade, channel, band, width, PHY mode via CoreWLAN. Reading the SSID requires Location permission on modern macOS, so it's **opt-in** in the module's settings — `LiveSSIDProvider` owns the `CLLocationManager` flow and only touches CoreLocation/CoreWLAN after the user opts in.
+
+### TrafficKit
+"Who is using the network" card: top per-app consumers, interface totals since boot, and a persisted per-day tally.
+
+- **Per-app traffic** comes from a **one-shot** `nettop -P -x -L 1 -n -t external` run per tick (the same counters Activity Monitor shows), only while the panel is open. Two measured facts shape this: `-n` is load-bearing — without it nettop spends a fixed ~5 s resolving names (5.04 s → 0.01 s) — and a *persistent* `-L 0` child is worse, not better, because it block-buffers into a pipe (first line after ~36 s). One-shot sampling costs ~8 ms of CPU and leaves no child to reap. Rows parse **from the right** because nettop truncates names that may contain dots/spaces/commas. If the output format ever drifts, the card degrades to "unavailable" and a live smoke test fails first.
+- **Daily usage** (`DailyUsageStore`) accumulates per-interface counter deltas into per-day buckets, rebaselining per interface on regressions (reboot, recreated `utun`) so one interface can never corrupt another's total. In-memory is the source of truth; it flushes to `UserDefaults` on an interval and when the panel closes. Optional **background tracking** (default **off**, interval selectable 5/10/20 min) reads counters on that interval — a single sysctl, no subprocesses — for meaningful daily totals even when the panel is rarely opened.
 
 ## Constraints & conventions for contributors
 

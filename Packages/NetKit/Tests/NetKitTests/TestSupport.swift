@@ -60,16 +60,120 @@ final class ScriptedMonitor: NetworkPathMonitoring, @unchecked Sendable {
 final class StubSSIDProvider: SSIDProviding {
     var status: SSIDAuthorizationStatus
     var ssidValue: String?
+    var detailsValue: WiFiDetails?
     var onStatusChange: (@MainActor (SSIDAuthorizationStatus) -> Void)?
     private(set) var requestCount = 0
 
-    init(status: SSIDAuthorizationStatus, ssid: String? = nil) {
+    init(status: SSIDAuthorizationStatus, ssid: String? = nil, details: WiFiDetails? = nil) {
         self.status = status
         ssidValue = ssid
+        detailsValue = details
     }
 
     func requestAuthorization() { requestCount += 1 }
     func currentSSID() -> String? { ssidValue }
+    func currentWiFiDetails() -> WiFiDetails? { detailsValue }
+}
+
+/// Returns a fixed config; nil simulates "dynamic store unavailable".
+struct StubConfigProvider: SystemNetworkConfigProviding {
+    var config: SystemNetworkConfig?
+
+    func currentConfig() -> SystemNetworkConfig? { config }
+}
+
+/// Replays a fixed VPN status and records the primary interface asked about.
+final class StubVPNProvider: VPNStatusProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let status: VPNStatus
+    private var interfaces: [String?] = []
+
+    init(_ status: VPNStatus = VPNStatus()) {
+        self.status = status
+    }
+
+    var askedInterfaces: [String?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return interfaces
+    }
+
+    func currentStatus(primaryInterface: String?) -> VPNStatus {
+        lock.lock()
+        interfaces.append(primaryInterface)
+        lock.unlock()
+        return status
+    }
+}
+
+final class ScriptedFirewallProvider: FirewallStateProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let state: FirewallState
+    private var calls = 0
+
+    init(_ state: FirewallState = .enabled) {
+        self.state = state
+    }
+
+    var callCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return calls
+    }
+
+    func currentState() async -> FirewallState {
+        lock.withLock { calls += 1 }
+        return state
+    }
+}
+
+final class ScriptedCaptiveChecker: CaptivePortalChecking, @unchecked Sendable {
+    private let lock = NSLock()
+    private let result: InternetReachability
+    private var calls = 0
+
+    init(_ result: InternetReachability = .fullInternet) {
+        self.result = result
+    }
+
+    var callCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return calls
+    }
+
+    func check() async -> InternetReachability {
+        lock.withLock { calls += 1 }
+        return result
+    }
+}
+
+func stubWiFiDetails(rssi: Int = -52, isOpen: Bool = false, weak: Bool = false) -> WiFiDetails {
+    let label = isOpen ? "Open" : (weak ? "WEP" : "WPA3 Personal")
+    return WiFiDetails(rssi: rssi, noise: -90, channelNumber: 44, band: "5 GHz",
+                       channelWidth: "80 MHz", phyMode: "802.11ax",
+                       securityLabel: label,
+                       isOpenNetwork: isOpen, isWeakSecurity: weak)
+}
+
+/// Returns a fixed set of exposed services and counts the scans.
+final class ScriptedExposedServicesProvider: ExposedServicesProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let services: [ExposedService]
+    private var calls = 0
+
+    init(_ services: [ExposedService] = []) {
+        self.services = services
+    }
+
+    var callCount: Int {
+        lock.withLock { calls }
+    }
+
+    func currentServices() async -> [ExposedService] {
+        lock.withLock { calls += 1 }
+        return services
+    }
 }
 
 /// Mutable fake clock injected as NetModule's `now`.

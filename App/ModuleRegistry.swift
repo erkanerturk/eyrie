@@ -6,6 +6,7 @@ import DisplayKit
 import AudioShareKit
 import StatsKit
 import NetKit
+import TrafficKit
 
 /// Owns all feature modules and which of them are enabled. Adding a module to
 /// the app means appending one entry to `modules` here.
@@ -19,6 +20,11 @@ final class ModuleRegistry {
     }
 
     private static let enabledKey = "registry.enabledModules"
+    private static let knownKey = "registry.knownModules"
+    /// Modules that shipped before `registry.knownModules` existed. An install
+    /// upgrading from such a build must not have deliberate disables of these
+    /// treated as "newly added" and re-enabled.
+    private static let legacyKnownIDs = ["awake", "focus", "audioshare", "display", "stats", "net"]
 
     init() {
         modules = [
@@ -28,12 +34,21 @@ final class ModuleRegistry {
             DisplayModule(),
             StatsModule(),
             NetModule(),
+            TrafficModule(),
         ]
-        if let stored = UserDefaults.standard.stringArray(forKey: Self.enabledKey) {
-            enabledIDs = Set(stored)
+        let defaults = UserDefaults.standard
+        let currentIDs = modules.map(\.id)
+        if let stored = defaults.stringArray(forKey: Self.enabledKey) {
+            // A module added in an update is absent from the stored enabled
+            // set; enable it once, without resurrecting known-but-disabled ones.
+            let known = defaults.stringArray(forKey: Self.knownKey) ?? Self.legacyKnownIDs
+            enabledIDs = Set(stored).union(currentIDs.filter { !known.contains($0) })
         } else {
-            enabledIDs = Set(modules.map(\.id))
+            enabledIDs = Set(currentIDs)
         }
+        // Property assignment in init doesn't fire didSet — persist explicitly.
+        defaults.set(Array(enabledIDs), forKey: Self.enabledKey)
+        defaults.set(currentIDs, forKey: Self.knownKey)
     }
 
     var enabledModules: [any EyrieModule] {

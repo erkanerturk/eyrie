@@ -31,7 +31,7 @@ struct StatsPanelView: View {
     }
 
     private var memoryColumn: some View {
-        MetricRow(label: "Memory", value: memoryText, indicator: pressureColor) {
+        MetricRow(label: "Memory", value: memoryText, indicator: pressureTone) {
             Sparkline(
                 points: sparkPoints { $0.memoryTotalBytes == 0 ? nil : $0.memoryFraction },
                 yDomain: 0...1
@@ -67,11 +67,13 @@ struct StatsPanelView: View {
         return "\(used) / \(total)"
     }
 
-    private var pressureColor: Color? {
+    /// Uses the app-wide tone vocabulary so a memory warning looks like every
+    /// other warning in the app.
+    private var pressureTone: StatusTone? {
         switch module.latest?.memoryPressure {
-        case .normal: .green
-        case .warning: .yellow
-        case .critical: .red
+        case .normal: .normal
+        case .warning: .caution
+        case .critical: .critical
         case nil: nil
         }
     }
@@ -91,10 +93,10 @@ struct StatsPanelView: View {
 private struct MetricRow<Graph: View>: View {
     var label: String
     var value: String
-    var indicator: Color?
+    var indicator: StatusTone?
     @ViewBuilder var graph: Graph
 
-    init(label: String, value: String, indicator: Color? = nil, @ViewBuilder graph: () -> Graph) {
+    init(label: String, value: String, indicator: StatusTone? = nil, @ViewBuilder graph: () -> Graph) {
         self.label = label
         self.value = value
         self.indicator = indicator
@@ -109,7 +111,7 @@ private struct MetricRow<Graph: View>: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let indicator {
-                    Circle().fill(indicator).frame(width: 6, height: 6)
+                    StatusDot(indicator)
                 }
                 Text(value)
                     .font(.caption.weight(.medium))

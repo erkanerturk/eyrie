@@ -20,6 +20,8 @@ packages:
     path: Packages/StatsKit
   NetKit:
     path: Packages/NetKit
+  TrafficKit:
+    path: Packages/TrafficKit
 
 targets:
   Eyrie:
@@ -35,6 +37,7 @@ targets:
       - package: AudioShareKit
       - package: StatsKit
       - package: NetKit
+      - package: TrafficKit
     info:
       path: App/Info.plist
       properties:
@@ -45,6 +48,13 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         NSLocationUsageDescription: Eyrie uses your location permission only to read the current Wi-Fi network name.
         NSLocationWhenInUseUsageDescription: Eyrie uses your location permission only to read the current Wi-Fi network name.
+        # Captive-portal detection fetches Apple's hotspot probe over plain
+        # HTTP by design (portals must be able to intercept it). Scoped
+        # exception only — everything else stays HTTPS.
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            captive.apple.com:
+              NSExceptionAllowsInsecureHTTPLoads: true
     entitlements:
       path: App/Eyrie.entitlements
       properties:

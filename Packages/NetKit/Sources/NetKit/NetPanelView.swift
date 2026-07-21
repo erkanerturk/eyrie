@@ -7,45 +7,139 @@ struct NetPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            statusRow
+            if module.showStatusBadges {
+                // Doubles as the card's header row: connection type first.
+                NetStatusBadgeRow(
+                    kind: module.snapshot?.kind,
+                    vpn: module.vpnStatus,
+                    firewall: module.firewallState,
+                    reachability: module.reachability,
+                    wifi: module.wifiDetails
+                )
+            }
+            if module.showSecurityWarnings, !module.securityFindings.isEmpty {
+                securitySection
+            }
             CopyableRow(label: "Local IP", value: module.snapshot?.displayLocalIP)
             CopyableRow(label: "External IP", value: module.externalIP,
                         isLoading: module.isFetchingExternalIP)
+            if module.showDNS, let config = module.config, !config.dnsServers.isEmpty {
+                dnsRow(config)
+            }
             if module.showSSID, module.snapshot?.kind == .wifi, let ssid = module.ssid {
-                HStack {
-                    Text("Network")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(ssid)
-                        .font(.caption.weight(.medium))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                detailRow(label: "Network", value: ssid, monospacedValue: false)
+            }
+            if module.showWiFiDetails, module.snapshot?.kind == .wifi,
+               let details = module.wifiDetails {
+                detailRow(label: "Signal", value: signalText(details))
+                detailRow(label: "Channel", value: channelText(details))
+            }
+            if module.showQuality, let kind = module.snapshot?.kind, kind != .offline {
+                qualityRow
             }
         }
         .onAppear { module.begin() }
         .onDisappear { module.end() }
     }
 
-    private var statusRow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: kind?.symbolName ?? "wifi")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .contentTransition(.symbolEffect(.replace))
-            Text(kind?.label ?? "Checking…")
-                .font(.caption.weight(.medium))
-            Spacer()
-            if let kind {
-                Circle()
-                    .fill(kind == .offline ? Color.secondary : Color.green)
-                    .frame(width: 6, height: 6)
+    private var securitySection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(module.securityFindings) { finding in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    StatusDot(finding.tone)
+                        // Nudge the dot onto the first line's optical center.
+                        .offset(y: -1)
+                    Text(finding.text)
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
             }
         }
     }
 
-    private var kind: ConnectionKind? { module.snapshot?.kind }
+    private func dnsRow(_ config: SystemNetworkConfig) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            CopyableRow(label: "DNS", value: config.dnsServers.joined(separator: ", "))
+            if let classification = DNSClassifier.classify(
+                servers: config.dnsServers, router: config.routerAddress
+            ) {
+                Text(classification.label)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    // Tuck under the value, clear of the copy button.
+                    .padding(.trailing, 28)
+            }
+        }
+    }
+
+    /// Latency and loss as one line — the dot carries the verdict, matching
+    /// how StatsKit shows memory pressure.
+    private var qualityRow: some View {
+        HStack(spacing: 6) {
+            Text("Quality")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if module.qualityHistory.isEmpty {
+                Text("Measuring…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                StatusDot(qualityTone)
+                Text(qualityText)
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var qualityTone: StatusTone {
+        QualityVerdict.tone(for: module.qualityHistory.elements)
+    }
+
+    private var qualityText: String {
+        let samples = module.qualityHistory.elements
+        let internet = samples.map(\.internetLatency)
+        let median = PingStats.medianLatency(internet)
+            ?? PingStats.medianLatency(samples.map(\.gatewayLatency))
+        let loss = PingStats.lossFraction(internet) ?? 0
+        let latencyText = median.map { "\(Int(($0 * 1000).rounded())) ms" } ?? "—"
+        return "\(latencyText) · \(Int((loss * 100).rounded()))% loss"
+    }
+
+    private func detailRow(label: String, value: String, monospacedValue: Bool = true) -> some View {
+        HStack {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.caption.weight(.medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    private func signalText(_ details: WiFiDetails) -> String {
+        var parts = ["\(details.rssi) dBm"]
+        if details.noise != 0 { parts.append("SNR \(details.snr) dB") }
+        parts.append(WiFiSignalGrade(rssi: details.rssi).label)
+        return parts.joined(separator: " · ")
+    }
+
+    private func channelText(_ details: WiFiDetails) -> String {
+        var parts: [String] = []
+        if details.channelNumber != 0 { parts.append("\(details.channelNumber)") }
+        if !details.band.isEmpty { parts.append(details.band) }
+        if !details.channelWidth.isEmpty { parts.append(details.channelWidth) }
+        if !details.phyMode.isEmpty { parts.append(details.phyMode) }
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
+    }
 }
 
 /// Label + monospaced value + always-visible copy button. Copying is the

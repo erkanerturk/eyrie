@@ -1,5 +1,5 @@
 import Testing
-@testable import StatsKit
+import EyrieCore
 
 struct RingBufferTests {
     @Test func appendBelowCapacity() {

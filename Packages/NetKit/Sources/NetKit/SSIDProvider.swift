@@ -18,6 +18,9 @@ public protocol SSIDProviding: AnyObject {
     var onStatusChange: (@MainActor (SSIDAuthorizationStatus) -> Void)? { get set }
     func requestAuthorization()
     func currentSSID() -> String?
+    /// Requirement (with a nil default) rather than a bare extension method,
+    /// so conformers' implementations dispatch dynamically through `any`.
+    func currentWiFiDetails() -> WiFiDetails?
 }
 
 @MainActor

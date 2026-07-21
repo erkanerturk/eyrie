@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Eyrie is a modular macOS 26+ menu bar app (SwiftUI, Liquid Glass). Six feature modules — AwakeKit (keep-awake), FocusKit (pomodoro), AudioShareKit (multi-device audio), DisplayKit (DDC/CI brightness), StatsKit (CPU/memory/network stats), NetKit (network identity) — live as local Swift Packages under `Packages/`, plus `EyrieCore` (shared protocol, services, glass UI components). The app target in `App/` is only a shell.
+Eyrie is a modular macOS 26+ menu bar app (SwiftUI, Liquid Glass). Seven feature modules — AwakeKit (keep-awake), FocusKit (pomodoro), AudioShareKit (multi-device audio), DisplayKit (DDC/CI brightness), StatsKit (CPU/memory/network stats), NetKit (network identity/status/quality), TrafficKit (per-app traffic + daily usage) — live as local Swift Packages under `Packages/`, plus `EyrieCore` (shared protocol, services, glass UI components). The app target in `App/` is only a shell.
 
 ## Commands
 
@@ -48,11 +48,18 @@ Shared services in EyrieCore:
 - **NotificationService** — has a `Bundle.main.bundleIdentifier` guard because `UNUserNotificationCenter` traps in unbundled processes (swift test runners). Keep it.
 - **`Date.timerRange(until:)`** — always use this for `Text(timerInterval:)`; a raw `now...end` traps when `end` slips into the past (this was a real shipped crash at phase turnover).
 - **ModuleCard / GlassIconButton** — the shared Liquid Glass visual language; module panels render inside `ModuleCard`.
+- **RingBuffer / Sparkline** — fixed-capacity history + Charts sparkline. `Sparkline`'s auto-scale floor defaults to 10 000 (bytes/s); pass a small `autoDomainFloor` for small units or the line flattens.
+- **StatusTone / StatusDot** — the app-wide vocabulary for "how is this doing" (`normal` / `caution` / `critical` / `inactive`) and the 6 pt dot that renders it. Every negative state goes through this; don't hand-pick `.yellow`/`.red` in a module.
+- **FlowLayout** — wrapping row layout; the panel is a fixed 340 pt, so badge rows must wrap rather than clip.
+- **ProcessRunner** — the only sanctioned way to run subprocesses (absolute paths, timeout kill). One-shot only; nothing in this app owns a long-lived child.
+- **NetworkInterfaceCounters** — per-interface 64-bit counters via `NET_RT_IFLIST2`; the single unsafe routing-socket walk in the codebase. StatsKit's totals and TrafficKit's per-interface tracking both go through it.
 
 Module-specific invariants:
 - **FocusKit**: a naturally finished phase parks in `pendingPhase` until the user taps start (`startPending()`); only explicit `skip()` auto-enters the next phase. This was a deliberate UX decision — do not reintroduce auto-advance. History persists as JSON via `FocusHistoryStore` (injectable `fileURL` for tests).
 - **AudioShareKit**: sharing = stacked aggregate device. On stop, restore the previous default output *before* destroying the aggregate. All CoreAudio calls live in `CoreAudioSupport`.
 - **DisplayKit**: private `IOAVService` APIs via `@_silgen_name` (the reason this app is direct-distribution only, no sandbox, no App Store). Pure DDC byte protocol lives in `DDCPacket` (unit-tested); `DDCService` is an actor that owns handles and serializes I2C.
+- **NetKit**: VPN detection must never treat bare `utun` presence as a signal (idle Macs carry ~20 utuns); the interpreter combines `SCNetworkConnection` status, `State:` key presence and a tunnel primary interface — keep `VPNStateInterpreter` pure and vendor-agnostic (no product names in `Sources/`). Security signals are **definitive-only**: an unknown/redacted `CWSecurity` must never raise an open- or weak-network warning. The firewall, captive and netstat probes each own an independent task and TTL — never merge them, since one slow network probe used to swallow the instant firewall read; `end()` deliberately lets them finish so the cache is warm on reopen. The captive check needs the scoped `captive.apple.com` ATS exception in `project.yml` and must not follow redirects. Ping uses unprivileged ICMP `SOCK_DGRAM` (kernel rewrites the identifier — match replies by sequence; replies arrive with the IP header prepended).
+- **TrafficKit**: per-app data comes from **one-shot** `nettop` runs per tick, and `-n` is load-bearing — without it nettop spends a fixed ~5 s on name resolution (measured 5.04 s → 0.01 s). A persistent `-L 0` child is *not* an optimization: it block-buffers into a pipe, so the first line took ~36 s to arrive. `NettopParser` parses rows from the right (names contain dots/spaces/commas and are truncated). `DailyUsageStore` keeps truth in memory and flushes to `UserDefaults` on an interval / on `end()`; it rebaselines per interface on counter regression. Background tracking stays **default-off**. Sorting and `NSRunningApplication` name lookups belong in the module, never in a view body.
 - Any module that changes state outside the process must implement `shutdown()`; the `AppDelegate` calls it on quit.
 
 Conventions:

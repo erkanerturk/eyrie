@@ -1,18 +1,39 @@
 import SwiftUI
 import Charts
 
-struct SparkPoint: Identifiable {
-    let id: Int
-    let value: Double
+public struct SparkPoint: Identifiable, Sendable {
+    public let id: Int
+    public let value: Double
+
+    public init(id: Int, value: Double) {
+        self.id = id
+        self.value = value
+    }
 }
 
 /// Compact axis-less line + area chart for one (optionally two) series.
-struct Sparkline: View {
-    var points: [SparkPoint]
+public struct Sparkline: View {
+    public var points: [SparkPoint]
     /// Second series drawn as a plain line (e.g. network upload).
-    var secondary: [SparkPoint] = []
+    public var secondary: [SparkPoint]
     /// Nil auto-scales to the visible window's max.
-    var yDomain: ClosedRange<Double>?
+    public var yDomain: ClosedRange<Double>?
+    /// Minimum ceiling of the auto-scaled domain, in the series' unit —
+    /// keeps idle noise from rendering as dramatic peaks. The default suits
+    /// bytes/s; pass a small floor for small-magnitude units like ms.
+    public var autoDomainFloor: Double
+
+    public init(
+        points: [SparkPoint],
+        secondary: [SparkPoint] = [],
+        yDomain: ClosedRange<Double>? = nil,
+        autoDomainFloor: Double = 10_000
+    ) {
+        self.points = points
+        self.secondary = secondary
+        self.yDomain = yDomain
+        self.autoDomainFloor = autoDomainFloor
+    }
 
     private var xDomain: ClosedRange<Int> {
         // Grow left-to-right for the first minute, then scroll.
@@ -20,7 +41,7 @@ struct Sparkline: View {
         return max(0, lastID - 59)...max(59, lastID)
     }
 
-    var body: some View {
+    public var body: some View {
         Chart {
             ForEach(points) { point in
                 AreaMark(x: .value("Tick", point.id), y: .value("Value", point.value))
@@ -52,7 +73,6 @@ struct Sparkline: View {
 
     private var autoDomain: ClosedRange<Double> {
         let peak = (points.map(\.value) + secondary.map(\.value)).max() ?? 0
-        // Floor keeps idle noise from rendering as dramatic peaks.
-        return 0...max(peak * 1.1, 10_000)
+        return 0...max(peak * 1.1, autoDomainFloor)
     }
 }

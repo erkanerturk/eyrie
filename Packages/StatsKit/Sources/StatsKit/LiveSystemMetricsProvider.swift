@@ -1,4 +1,5 @@
 import Darwin
+import EyrieCore
 import Foundation
 
 enum MetricsError: Error {
@@ -100,41 +101,8 @@ public struct LiveSystemMetricsProvider: SystemMetricsProviding {
     }
 
     private func readNetworkTotals() throws -> (received: UInt64, sent: UInt64) {
-        // NET_RT_IFLIST2 rather than getifaddrs: if_msghdr2 carries 64-bit
-        // byte counters (if_data64), while getifaddrs' if_data wraps at 4 GiB.
-        var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0]
-        var length = 0
-        guard sysctl(&mib, u_int(mib.count), nil, &length, nil, 0) == 0 else {
-            throw MetricsError.sysctl("NET_RT_IFLIST2 size", errno)
-        }
-        let buffer = UnsafeMutableRawPointer.allocate(byteCount: length, alignment: MemoryLayout<if_msghdr2>.alignment)
-        defer { buffer.deallocate() }
-        guard sysctl(&mib, u_int(mib.count), buffer, &length, nil, 0) == 0 else {
-            throw MetricsError.sysctl("NET_RT_IFLIST2", errno)
-        }
-
-        var received: UInt64 = 0
-        var sent: UInt64 = 0
-        var offset = 0
-        // Records are variable-length and not guaranteed aligned — walk with
-        // loadUnaligned, advancing by ifm_msglen.
-        while offset + MemoryLayout<if_msghdr>.size <= length {
-            let header = UnsafeRawPointer(buffer).loadUnaligned(fromByteOffset: offset, as: if_msghdr.self)
-            guard header.ifm_msglen > 0 else { break }
-            if Int32(header.ifm_type) == RTM_IFINFO2,
-               offset + MemoryLayout<if_msghdr2>.size <= length {
-                let message = UnsafeRawPointer(buffer).loadUnaligned(fromByteOffset: offset, as: if_msghdr2.self)
-                let flags = message.ifm_flags
-                // v2 hook: per-interface selection — sockaddr_dl after the
-                // header carries the interface name; for now sum everything
-                // that is up, running, and not loopback.
-                if flags & IFF_LOOPBACK == 0, flags & IFF_UP != 0, flags & IFF_RUNNING != 0 {
-                    received &+= message.ifm_data.ifi_ibytes
-                    sent &+= message.ifm_data.ifi_obytes
-                }
-            }
-            offset += Int(header.ifm_msglen)
-        }
-        return (received: received, sent: sent)
+        // The NET_RT_IFLIST2 walk lives in EyrieCore (TrafficKit reads the
+        // same counters per interface); the aggregate keeps the old behavior.
+        NetworkInterfaceCounters.totals(of: try NetworkInterfaceCounters.read())
     }
 }
