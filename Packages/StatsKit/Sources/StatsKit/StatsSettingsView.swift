@@ -20,6 +20,13 @@ struct StatsSettingsView: View {
                 Toggle("Memory", isOn: $module.showMemory)
                 Toggle("Network", isOn: $module.showNetwork)
             }
+
+            Section("Appearance") {
+                Toggle("Show graphs", isOn: $module.showGraphs)
+                Text("Hiding the sparklines leaves just the numbers, for a shorter card.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

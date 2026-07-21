@@ -28,6 +28,11 @@ public final class StatsModule: EyrieModule {
     public var showNetwork: Bool {
         didSet { defaults.set(showNetwork, forKey: Self.showNetworkKey) }
     }
+    /// Sparklines are the point of the card for most people, so this is on by
+    /// default; turning it off leaves the numbers in a much shorter card.
+    public var showGraphs: Bool {
+        didSet { defaults.set(showGraphs, forKey: Self.showGraphsKey) }
+    }
 
     @ObservationIgnored private let provider: any SystemMetricsProviding
     @ObservationIgnored private var samplingTask: Task<Void, Never>?
@@ -40,6 +45,7 @@ public final class StatsModule: EyrieModule {
     private static let showCPUKey = "stats.showCPU"
     private static let showMemoryKey = "stats.showMemory"
     private static let showNetworkKey = "stats.showNetwork"
+    private static let showGraphsKey = "stats.showGraphs"
 
     public init(provider: any SystemMetricsProviding = LiveSystemMetricsProvider()) {
         self.provider = provider
@@ -47,6 +53,7 @@ public final class StatsModule: EyrieModule {
         showCPU = defaults.object(forKey: Self.showCPUKey) as? Bool ?? true
         showMemory = defaults.object(forKey: Self.showMemoryKey) as? Bool ?? true
         showNetwork = defaults.object(forKey: Self.showNetworkKey) as? Bool ?? true
+        showGraphs = defaults.object(forKey: Self.showGraphsKey) as? Bool ?? true
     }
 
     /// Idempotent; called from the panel's onAppear.

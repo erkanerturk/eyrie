@@ -31,7 +31,8 @@ struct NetPanelView: View {
             }
             if module.showWiFiDetails, module.snapshot?.kind == .wifi,
                let details = module.wifiDetails {
-                detailRow(label: "Signal", value: signalText(details))
+                detailRow(label: "Signal", value: signalText(details),
+                          tone: WiFiSignalGrade(rssi: details.rssi).tone)
                 detailRow(label: "Channel", value: channelText(details))
             }
             if module.showQuality, let kind = module.snapshot?.kind, kind != .offline {
@@ -110,12 +111,16 @@ struct NetPanelView: View {
         return "\(latencyText) · \(Int((loss * 100).rounded()))% loss"
     }
 
-    private func detailRow(label: String, value: String, monospacedValue: Bool = true) -> some View {
-        HStack {
+    private func detailRow(label: String, value: String, monospacedValue: Bool = true,
+                           tone: StatusTone? = nil) -> some View {
+        HStack(spacing: 6) {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
+            if let tone {
+                StatusDot(tone)
+            }
             Text(value)
                 .font(.caption.weight(.medium))
                 .monospacedDigit()

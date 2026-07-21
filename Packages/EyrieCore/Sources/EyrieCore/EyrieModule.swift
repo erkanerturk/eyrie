@@ -21,10 +21,20 @@ public protocol EyrieModule: AnyObject, Identifiable, Observable {
     /// Called when the app is about to terminate so the module can undo
     /// system-level changes (power assertions, aggregate audio devices, ...).
     func shutdown()
+    /// Called at launch with the persisted state and whenever the user toggles
+    /// the module in Settings. A disabled module is still instantiated, so any
+    /// module that works outside the panel must stop doing so here.
+    func setModuleEnabled(_ enabled: Bool)
 }
 
 public extension EyrieModule {
     func shutdown() {}
+
+    /// Panel-driven modules need nothing beyond this: a disabled module is
+    /// never rendered, so its `onDisappear` teardown has already run.
+    func setModuleEnabled(_ enabled: Bool) {
+        if !enabled { shutdown() }
+    }
 
     var panelAccessory: AnyView { AnyView(EmptyView()) }
 

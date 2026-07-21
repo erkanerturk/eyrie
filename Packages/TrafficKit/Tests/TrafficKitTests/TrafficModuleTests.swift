@@ -133,4 +133,26 @@ struct TrafficModuleTests {
         #expect(module.backgroundIntervalMinutes == 5)
         #expect(TrafficModule.backgroundIntervalChoices == [5, 10, 20])
     }
+
+    /// A module the user switched off is still instantiated by the registry —
+    /// it must not keep reading counters in the background.
+    @Test func aDisabledModuleRunsNoBackgroundWork() async {
+        let reads = CallCounter()
+        let module = TrafficModule(
+            sampler: ScriptedSampler(),
+            readCounters: { reads.increment(); return [interface("en0", in: 1, out: 1)] },
+            usageStore: DailyUsageStore(defaults: temporaryDefaults())
+        )
+        module.setModuleEnabled(false)
+        module.backgroundTracking = true
+        for _ in 0..<20 { await Task.yield() }
+        #expect(reads.value == 0)
+
+        // Re-enabling brings the loop back with its immediate baseline read.
+        module.setModuleEnabled(true)
+        for _ in 0..<50 where reads.value == 0 {
+            await Task.yield()
+        }
+        #expect(reads.value >= 1)
+    }
 }

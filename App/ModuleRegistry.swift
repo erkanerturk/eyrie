@@ -30,8 +30,8 @@ final class ModuleRegistry {
         modules = [
             AwakeModule(),
             FocusModule(),
-            AudioShareModule(),
             DisplayModule(),
+            AudioShareModule(),
             StatsModule(),
             NetModule(),
             TrafficModule(),
@@ -49,6 +49,11 @@ final class ModuleRegistry {
         // Property assignment in init doesn't fire didSet — persist explicitly.
         defaults.set(Array(enabledIDs), forKey: Self.enabledKey)
         defaults.set(currentIDs, forKey: Self.knownKey)
+        // Every module is instantiated regardless; this is what stops a
+        // disabled one from doing background work.
+        for module in modules {
+            module.setModuleEnabled(enabledIDs.contains(module.id))
+        }
     }
 
     var enabledModules: [any EyrieModule] {
@@ -73,5 +78,6 @@ final class ModuleRegistry {
         } else {
             enabledIDs.remove(module.id)
         }
+        module.setModuleEnabled(enabled)
     }
 }

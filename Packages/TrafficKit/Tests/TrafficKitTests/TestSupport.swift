@@ -42,6 +42,18 @@ final class FakeClock: @unchecked Sendable {
     }
 }
 
+/// Counts calls from the non-isolated `readCounters` closure.
+final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int { lock.withLock { count } }
+
+    func increment() {
+        lock.withLock { count += 1 }
+    }
+}
+
 func process(_ pid: Int32, _ name: String, in bytesIn: UInt64, out bytesOut: UInt64) -> ProcessTraffic {
     ProcessTraffic(pid: pid, name: name, bytesIn: bytesIn, bytesOut: bytesOut)
 }

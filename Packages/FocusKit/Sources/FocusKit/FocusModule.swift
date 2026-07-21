@@ -128,6 +128,13 @@ public final class FocusModule: EyrieModule {
         PowerAssertionService.shared.release(token: id)
     }
 
+    /// Quitting ends the running phase: the timer can't survive the process,
+    /// so the power assertion must not either. Finished sessions are already
+    /// in `history`; an interrupted one is deliberately not recorded.
+    public func shutdown() {
+        stop()
+    }
+
     /// Fraction of the current phase elapsed, for the progress ring.
     public func progress(at date: Date) -> Double {
         guard phaseDuration > 0 else { return 0 }

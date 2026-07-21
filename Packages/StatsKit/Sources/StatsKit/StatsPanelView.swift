@@ -24,14 +24,15 @@ struct StatsPanelView: View {
     }
 
     private var cpuColumn: some View {
-        MetricRow(label: "CPU", value: cpuText) {
+        MetricRow(label: "CPU", value: cpuText, showsGraph: module.showGraphs) {
             Sparkline(points: sparkPoints(\.cpuTotal), yDomain: 0...1)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var memoryColumn: some View {
-        MetricRow(label: "Memory", value: memoryText, indicator: pressureTone) {
+        MetricRow(label: "Memory", value: memoryText, indicator: pressureTone,
+                  showsGraph: module.showGraphs) {
             Sparkline(
                 points: sparkPoints { $0.memoryTotalBytes == 0 ? nil : $0.memoryFraction },
                 yDomain: 0...1
@@ -41,7 +42,7 @@ struct StatsPanelView: View {
     }
 
     private var networkRow: some View {
-        MetricRow(label: "Network", value: networkText) {
+        MetricRow(label: "Network", value: networkText, showsGraph: module.showGraphs) {
             Sparkline(
                 points: sparkPoints(\.downBytesPerSecond),
                 secondary: sparkPoints(\.upBytesPerSecond)
@@ -60,11 +61,24 @@ struct StatsPanelView: View {
         return cpu.formatted(.percent.precision(.fractionLength(0)))
     }
 
+    /// "12,4 / 32 GB" — the unit is written once. Repeating it cost enough
+    /// width to trigger the row's `minimumScaleFactor` and shrink the text.
     private var memoryText: String {
         guard let latest = module.latest, latest.memoryTotalBytes > 0 else { return "—" }
-        let used = Int64(latest.memoryUsedBytes).formatted(.byteCount(style: .memory))
-        let total = Int64(latest.memoryTotalBytes).formatted(.byteCount(style: .memory))
-        return "\(used) / \(total)"
+        let gibibyte: UInt64 = 1024 * 1024 * 1024
+        // Every Mac this app runs on has gigabytes of RAM; below that the
+        // shared unit would be wrong, so fall back to spelling both out.
+        guard latest.memoryTotalBytes >= gibibyte else {
+            let used = Int64(latest.memoryUsedBytes).formatted(.byteCount(style: .memory))
+            let total = Int64(latest.memoryTotalBytes).formatted(.byteCount(style: .memory))
+            return "\(used) / \(total)"
+        }
+        let scale = Double(gibibyte)
+        let used = (Double(latest.memoryUsedBytes) / scale)
+            .formatted(.number.precision(.fractionLength(1)))
+        let total = (Double(latest.memoryTotalBytes) / scale)
+            .formatted(.number.precision(.fractionLength(0)))
+        return "\(used) / \(total) GB"
     }
 
     /// Uses the app-wide tone vocabulary so a memory warning looks like every
@@ -94,12 +108,15 @@ private struct MetricRow<Graph: View>: View {
     var label: String
     var value: String
     var indicator: StatusTone?
+    var showsGraph: Bool
     @ViewBuilder var graph: Graph
 
-    init(label: String, value: String, indicator: StatusTone? = nil, @ViewBuilder graph: () -> Graph) {
+    init(label: String, value: String, indicator: StatusTone? = nil, showsGraph: Bool = true,
+         @ViewBuilder graph: () -> Graph) {
         self.label = label
         self.value = value
         self.indicator = indicator
+        self.showsGraph = showsGraph
         self.graph = graph()
     }
 
@@ -119,7 +136,9 @@ private struct MetricRow<Graph: View>: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            graph
+            if showsGraph {
+                graph
+            }
         }
     }
 }

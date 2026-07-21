@@ -44,7 +44,7 @@ struct NetStatusBadgeRow: View {
         switch firewall {
         case .enabled:
             result.append(Badge(id: "firewall", symbolName: "shield.lefthalf.filled",
-                                text: "Firewall", tone: .inactive))
+                                text: "Firewall", tone: .normal))
         case .blockAll:
             result.append(Badge(id: "firewall", symbolName: "shield.fill",
                                 text: "Block all", tone: .normal))

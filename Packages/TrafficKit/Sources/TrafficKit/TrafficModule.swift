@@ -60,6 +60,8 @@ public final class TrafficModule: EyrieModule {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     @ObservationIgnored private var backgroundTask: Task<Void, Never>?
+    /// The registry pins this right after init; assume enabled until told.
+    @ObservationIgnored private var isModuleEnabled = true
     @ObservationIgnored private var latestRates: [ProcessTrafficRate] = []
     @ObservationIgnored private var previousFrame: [ProcessTraffic]?
     @ObservationIgnored private var previousFrameAt: Date?
@@ -123,6 +125,14 @@ public final class TrafficModule: EyrieModule {
         end()
         backgroundTask?.cancel()
         backgroundTask = nil
+    }
+
+    /// This is the one module that keeps working with the panel closed, so a
+    /// module the user switched off must not keep reading counters.
+    public func setModuleEnabled(_ enabled: Bool) {
+        isModuleEnabled = enabled
+        if !enabled { end() }
+        syncBackgroundLoop()
     }
 
     func tick() async {
@@ -192,7 +202,7 @@ public final class TrafficModule: EyrieModule {
     private func syncBackgroundLoop() {
         backgroundTask?.cancel()
         backgroundTask = nil
-        guard backgroundTracking else { return }
+        guard isModuleEnabled, backgroundTracking else { return }
         let interval = TimeInterval(backgroundIntervalMinutes * 60)
         backgroundTask = Task { [weak self] in
             // Immediate baseline so the first interval's delta is attributable.

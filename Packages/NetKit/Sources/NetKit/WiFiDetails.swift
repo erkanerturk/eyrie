@@ -1,4 +1,5 @@
 import CoreWLAN
+import EyrieCore
 import Foundation
 
 /// Signal + link details of the associated Wi-Fi network.
@@ -52,6 +53,16 @@ public enum WiFiSignalGrade: Sendable, Equatable {
         case .good: "Good"
         case .fair: "Fair"
         case .weak: "Weak"
+        }
+    }
+
+    /// Same vocabulary as the quality row and StatsKit's memory pressure, so
+    /// "this is bad" looks identical everywhere in the app.
+    public var tone: StatusTone {
+        switch self {
+        case .excellent, .good: .normal
+        case .fair: .caution
+        case .weak: .critical
         }
     }
 }

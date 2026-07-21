@@ -62,6 +62,12 @@ public final class AwakeModule: EyrieModule {
         PowerAssertionService.shared.release(token: id)
     }
 
+    /// The kernel drops assertions with the process, but releasing explicitly
+    /// keeps `pmset -g assertions` clean even if termination is slow.
+    public func shutdown() {
+        stop()
+    }
+
     @discardableResult
     private func holdAssertion() -> Bool {
         PowerAssertionService.shared.hold(
