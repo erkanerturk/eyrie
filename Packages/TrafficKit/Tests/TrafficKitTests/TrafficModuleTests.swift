@@ -135,6 +135,40 @@ struct TrafficModuleTests {
         #expect(TrafficModule.backgroundIntervalChoices == [5, 10, 20])
     }
 
+    /// Closing the panel stops the measurement, so the rates it produced stop
+    /// being true. They used to survive `end()` and get re-rendered instantly
+    /// on the next open, showing minutes-old traffic as if it were live. The
+    /// cumulative totals do stay — those are still correct.
+    @Test func closingThePanelStopsClaimingLiveRates() {
+        let clock = FakeClock()
+        let module = makeModule(clock: clock)
+        module.applyFrame([process(10, "Safari", in: 1000, out: 200)])
+        clock.advance(by: 2)
+        module.applyFrame([process(10, "Safari", in: 5000, out: 600)])
+        #expect(module.topConsumers?[0].inPerSecond == 2000)
+
+        module.end()
+        #expect(module.topConsumers?[0].inPerSecond == 0)
+        #expect(module.topConsumers?[0].outPerSecond == 0)
+        #expect(module.topConsumers?[0].bytesIn == 5000)
+    }
+
+    /// The other half of the same complaint: toggling the setting off and back
+    /// on must not resurrect the old rows at all.
+    @Test func togglingPerAppOffAndOnDoesNotResurrectOldRows() {
+        let clock = FakeClock()
+        let module = makeModule(clock: clock)
+        module.applyFrame([process(10, "Safari", in: 1000, out: 0)])
+        clock.advance(by: 2)
+        module.applyFrame([process(10, "Safari", in: 5000, out: 0)])
+        #expect(module.topConsumers != nil)
+
+        module.showPerApp = false
+        module.topCount = 8
+        module.showPerApp = true
+        #expect(module.topConsumers == nil)
+    }
+
     /// A module the user switched off is still instantiated by the registry —
     /// it must not keep reading counters in the background.
     @Test func aDisabledModuleRunsNoBackgroundWork() async {

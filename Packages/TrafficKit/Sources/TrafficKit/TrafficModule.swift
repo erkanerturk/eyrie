@@ -128,6 +128,11 @@ public final class TrafficModule: EyrieModule {
         tickTask = nil
         previousFrame = nil
         previousFrameAt = nil
+        // Totals stay valid — they are cumulative per process — but the rates
+        // describe a measurement window that just stopped. Keeping them would
+        // make the next panel open render minutes-old traffic as if it were
+        // live; zeroing drops the rate badge until a new frame pair lands.
+        clearRates()
         usageStore.flush()
     }
 
@@ -183,6 +188,19 @@ public final class TrafficModule: EyrieModule {
             named.displayName = resolvedName(for: row)
             return named
         }
+    }
+
+    /// Drops the per-second figures while keeping the cumulative totals, so a
+    /// stopped card shows what was used without claiming it is still flowing.
+    private func clearRates() {
+        guard !latestRates.isEmpty else { return }
+        latestRates = latestRates.map { row in
+            var stopped = row
+            stopped.inPerSecond = 0
+            stopped.outPerSecond = 0
+            return stopped
+        }
+        recomputeTopConsumers()
     }
 
     private func resolvedName(for row: ProcessTrafficRate) -> String {
