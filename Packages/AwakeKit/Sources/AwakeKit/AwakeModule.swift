@@ -7,9 +7,22 @@ import EyrieCore
 public final class AwakeModule: EyrieModule {
     public let id = "awake"
     public let name = "Keep Awake"
-    public var symbolName: String { isActive ? "cup.and.heat.waves.fill" : "cup.and.heat.waves" }
+    /// The cup is the "your Mac is held awake" symbol and sits right next to
+    /// the session toggle, so it tracks the session only — the menu bar bird
+    /// (`isActive`) is the union of both features.
+    public var symbolName: String { isSessionActive ? "cup.and.heat.waves.fill" : "cup.and.heat.waves" }
 
-    public private(set) var isActive = false
+    public var isActive: Bool { isSessionActive || isSimulatingActivity }
+
+    /// Whether a keep-awake power assertion session is running.
+    public private(set) var isSessionActive = false
+    /// True only while the tick loop runs AND the Accessibility grant is
+    /// present — an untrusted simulator delivers nothing, so it must not
+    /// report itself (or light the menu bar) as working.
+    public private(set) var isSimulatingActivity = false
+    /// Stored (not computed over `AXIsProcessTrusted()`) so `@Observable`
+    /// tracks it; refreshed on toggle, on module enable, and on every tick.
+    public private(set) var hasAccessibilityTrust: Bool
     /// Nil while active means the session runs until manually stopped.
     public private(set) var sessionEndDate: Date?
 
@@ -25,21 +38,65 @@ public final class AwakeModule: EyrieModule {
         }
     }
 
+    /// Periodically nudges the pointer while the user is idle so chat apps
+    /// don't mark them away. Runs with the panel closed, so enable/disable
+    /// goes through `setModuleEnabled(_:)`, not view lifecycle.
+    public var simulateActivity: Bool {
+        didSet {
+            defaults.set(simulateActivity, forKey: Self.simulateActivityKey)
+            syncSimulator()
+            if simulateActivity, !hasAccessibilityTrust {
+                ActivitySimulator.promptForAccessibilityTrust()
+            }
+        }
+    }
+
+    public var activityInterval: AwakeActivityInterval {
+        didSet {
+            defaults.set(activityInterval.rawValue, forKey: Self.activityIntervalKey)
+            simulator.interval = activityInterval.seconds
+            // The in-flight sleep was scheduled with the old duration; bounce
+            // the loop so the change applies now, not one old-interval later.
+            if simulator.isRunning {
+                simulator.stop()
+                simulator.start()
+            }
+        }
+    }
+
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
-    @ObservationIgnored private let defaults = UserDefaults.standard
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let simulator: ActivitySimulator
+    @ObservationIgnored private let trustCheck: () -> Bool
+    /// The registry calls `setModuleEnabled(_:)` at launch, so the simulator
+    /// stays parked until then even when the preference is on.
+    @ObservationIgnored private var isModuleEnabled = false
 
     private static let presetKey = "awake.preset"
     private static let displaySleepKey = "awake.allowDisplaySleep"
+    private static let simulateActivityKey = "awake.simulateActivity"
+    private static let activityIntervalKey = "awake.activityInterval"
 
-    public init() {
+    /// `defaults` and `trustCheck` are injectable so tests never write the
+    /// real preferences or depend on the runner's TCC state.
+    public init(defaults: UserDefaults = .standard, trustCheck: (() -> Bool)? = nil) {
+        self.defaults = defaults
+        let trustCheck = trustCheck ?? { ActivitySimulator.hasAccessibilityTrust }
+        self.trustCheck = trustCheck
+        hasAccessibilityTrust = trustCheck()
         selectedPreset = AwakePreset(rawValue: defaults.integer(forKey: Self.presetKey)) ?? .indefinite
         allowDisplaySleep = defaults.bool(forKey: Self.displaySleepKey)
+        simulateActivity = defaults.bool(forKey: Self.simulateActivityKey)
+        let interval = AwakeActivityInterval(rawValue: defaults.integer(forKey: Self.activityIntervalKey)) ?? .minute1
+        activityInterval = interval
+        simulator = ActivitySimulator(interval: interval.seconds)
+        simulator.onTick = { [weak self] in self?.refreshAccessibilityTrust() }
     }
 
     public func start() {
         sessionTask?.cancel()
         guard holdAssertion() else { return }
-        isActive = true
+        isSessionActive = true
 
         if let minutes = selectedPreset.minutes {
             let end = Date.now.addingTimeInterval(TimeInterval(minutes * 60))
@@ -58,7 +115,7 @@ public final class AwakeModule: EyrieModule {
         sessionTask?.cancel()
         sessionTask = nil
         sessionEndDate = nil
-        isActive = false
+        isSessionActive = false
         PowerAssertionService.shared.release(token: id)
     }
 
@@ -66,6 +123,33 @@ public final class AwakeModule: EyrieModule {
     /// keeps `pmset -g assertions` clean even if termination is slow.
     public func shutdown() {
         stop()
+        isModuleEnabled = false
+        syncSimulator()
+    }
+
+    public func setModuleEnabled(_ enabled: Bool) {
+        isModuleEnabled = enabled
+        if !enabled { stop() }
+        syncSimulator()
+    }
+
+    /// Re-polls the Accessibility grant and derives the reported simulation
+    /// state. The loop keeps running while untrusted (that's the polling that
+    /// notices a grant made in System Settings), but an undelivered nudge
+    /// must not present as "simulating".
+    func refreshAccessibilityTrust() {
+        hasAccessibilityTrust = trustCheck()
+        isSimulatingActivity = simulator.isRunning && hasAccessibilityTrust
+    }
+
+    private func syncSimulator() {
+        let shouldRun = simulateActivity && isModuleEnabled
+        if shouldRun, !simulator.isRunning {
+            simulator.start()
+        } else if !shouldRun, simulator.isRunning {
+            simulator.stop()
+        }
+        refreshAccessibilityTrust()
     }
 
     @discardableResult

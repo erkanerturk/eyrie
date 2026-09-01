@@ -16,11 +16,11 @@ struct AwakePanelView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .opacity(module.isActive ? 0 : 1)
-                .allowsHitTesting(!module.isActive)
-                .accessibilityHidden(module.isActive)
+                .opacity(module.isSessionActive ? 0 : 1)
+                .allowsHitTesting(!module.isSessionActive)
+                .accessibilityHidden(module.isSessionActive)
 
-                if module.isActive {
+                if module.isSessionActive {
                     HStack(spacing: 6) {
                         Image(systemName: "moon.zzz.fill")
                             .foregroundStyle(.tint)
@@ -35,9 +35,29 @@ struct AwakePanelView: View {
             }
 
             if module.allowDisplaySleep {
-                Text(module.isActive ? "Display is allowed to sleep" : "Display will be allowed to sleep")
+                Text(module.isSessionActive ? "Display is allowed to sleep" : "Display will be allowed to sleep")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Toggle(isOn: $module.simulateActivity) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Simulate activity")
+                    Text("Nudges the pointer while you're idle so chat apps keep you available.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+
+            if module.simulateActivity, !module.hasAccessibilityTrust {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    StatusDot(.caution)
+                    Text("Needs Accessibility access — allow Eyrie in System Settings → Privacy & Security → Accessibility.")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
     }
@@ -48,7 +68,7 @@ struct AwakeToggle: View {
 
     var body: some View {
         Toggle("Keep Awake", isOn: Binding(
-            get: { module.isActive },
+            get: { module.isSessionActive },
             set: { $0 ? module.start() : module.stop() }
         ))
         .labelsHidden()

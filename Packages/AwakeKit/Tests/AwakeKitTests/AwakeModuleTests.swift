@@ -23,10 +23,25 @@ struct AwakePresetTests {
 }
 
 @MainActor
+private final class TrustBox {
+    var trusted = true
+}
+
+@MainActor
 struct AwakeModuleTests {
-    private func makeModule() -> AwakeModule {
-        let module = AwakeModule()
-        module.stop() // known clean state regardless of persisted defaults
+    private static let suiteName = "AwakeKitTests"
+
+    /// A wiped, app-independent domain — tests must never write the real
+    /// preferences through the toggles' `didSet`.
+    private func makeDefaults() -> UserDefaults {
+        let defaults = UserDefaults(suiteName: Self.suiteName)!
+        defaults.removePersistentDomain(forName: Self.suiteName)
+        return defaults
+    }
+
+    private func makeModule(trustedBox: TrustBox = TrustBox()) -> AwakeModule {
+        let module = AwakeModule(defaults: makeDefaults(), trustCheck: { trustedBox.trusted })
+        module.stop() // known clean state regardless of prior assertions
         return module
     }
 
@@ -75,6 +90,91 @@ struct AwakeModuleTests {
         #expect(module.symbolName == "cup.and.heat.waves.fill")
         module.stop()
         #expect(module.symbolName == "cup.and.heat.waves")
+    }
+
+    @Test func simulatorWaitsForModuleEnable() {
+        let module = makeModule()
+        defer { module.setModuleEnabled(false) }
+
+        module.simulateActivity = true
+        #expect(!module.isSimulatingActivity, "the registry hasn't enabled the module yet")
+
+        module.setModuleEnabled(true)
+        #expect(module.isSimulatingActivity)
+        #expect(module.isActive, "simulation alone must light up the menu bar icon")
+        #expect(!module.isSessionActive, "no power assertion session was started")
+
+        module.simulateActivity = false
+        #expect(!module.isSimulatingActivity)
+        #expect(!module.isActive)
+    }
+
+    @Test func disablingModuleStopsSimulatorAndReenableRestoresIt() {
+        let module = makeModule()
+        defer { module.setModuleEnabled(false) }
+
+        module.setModuleEnabled(true)
+        module.simulateActivity = true
+        #expect(module.isSimulatingActivity)
+
+        module.setModuleEnabled(false)
+        #expect(!module.isSimulatingActivity)
+
+        module.setModuleEnabled(true)
+        #expect(module.isSimulatingActivity, "re-enable must restore the persisted preference")
+    }
+
+    @Test func shutdownStopsSimulatorAndStaysStopped() {
+        let module = makeModule()
+
+        module.setModuleEnabled(true)
+        module.simulateActivity = true
+        module.shutdown()
+        #expect(!module.isSimulatingActivity)
+
+        // shutdown() also clears the enabled flag, so a stray sync can't
+        // restart the loop mid-termination.
+        module.refreshAccessibilityTrust()
+        #expect(!module.isSimulatingActivity)
+    }
+
+    @Test func untrustedSimulatorDoesNotReportActive() {
+        let box = TrustBox()
+        box.trusted = false
+        let module = makeModule(trustedBox: box)
+        defer { module.setModuleEnabled(false) }
+
+        module.setModuleEnabled(true)
+        module.simulateActivity = true
+        #expect(!module.hasAccessibilityTrust)
+        #expect(!module.isSimulatingActivity, "an undelivered nudge must not present as simulating")
+        #expect(!module.isActive)
+
+        box.trusted = true
+        module.refreshAccessibilityTrust() // what the tick loop does each tick
+        #expect(module.hasAccessibilityTrust)
+        #expect(module.isSimulatingActivity)
+        #expect(module.isActive)
+    }
+
+    @Test func symbolTracksSessionNotSimulation() {
+        let module = makeModule()
+        defer { module.setModuleEnabled(false) }
+
+        module.setModuleEnabled(true)
+        module.simulateActivity = true
+        #expect(module.isActive)
+        #expect(module.symbolName == "cup.and.heat.waves",
+                "the cup means a power assertion; simulation alone must not fill it")
+    }
+
+    @Test func activityIntervalPersists() {
+        let defaults = makeDefaults()
+        let module = AwakeModule(defaults: defaults, trustCheck: { true })
+        module.activityInterval = .minutes5
+
+        let fresh = AwakeModule(defaults: defaults, trustCheck: { true })
+        #expect(fresh.activityInterval == .minutes5)
     }
 
     @Test func togglingDisplaySleepWhileActiveKeepsAssertion() {
