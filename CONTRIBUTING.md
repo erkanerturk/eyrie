@@ -55,12 +55,10 @@ Subjects are **English only** — the hook rejects Turkish characters. Commits t
 
 ## `main` is closed to direct work
 
-Everything reaches `main` through a PR. The hooks enforce it on both ends — `commit-msg` rejects committing on `main`, and `pre-push` rejects pushing stray commits to it — with exactly two exceptions:
+Everything reaches `main` through a PR, and **no PR merges without at least one approving review** (plus green CI). Two layers enforce the branch policy:
 
-- 🚀 `Releasing: v<version>` version-bump commits (the release flow in [Docs/RELEASING.md](Docs/RELEASING.md))
-- Merge commits (PR merges, `git pull`)
-
-This is client-side; the matching server-side rule is a branch ruleset only a repo admin can add (require a pull request before merging on `main`).
+- **Server-side (authoritative):** the `main protection` ruleset — changes only via PR, `build-and-test` required.
+- **Client-side (fails earlier, nicer message):** `commit-msg` rejects committing on `main` and `pre-push` rejects pushing stray commits to it, excepting only 🚀 `Releasing: v<version>` bumps and merge commits (`git pull`). Note the ruleset is stricter: even a `Releasing:` bump reaches `main` through a release PR — see [Docs/RELEASING.md](Docs/RELEASING.md). Release branches are named `release/v<version>`.
 
 ## Branches
 
