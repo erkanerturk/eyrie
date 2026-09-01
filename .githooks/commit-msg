@@ -2,21 +2,23 @@
 
 # Commit message validation + automatic emoji prefix by pattern (see CONTRIBUTING.md)
 # Pattern -> emoji: [feature/Eyrie-x] ✨ | [bugfix/Eyrie-x] 🐞 | [hotfix/Eyrie-x] 🚨 |
-#                   Refactor: 🔨 | Update: 🔄 | git-generated Merge 🔀 | Revert ⏪
+#                   Refactor: 🔨 | Update: 🔄 | Releasing: 🚀 | git-generated Merge 🔀 | Revert ⏪
 # fixup!/squash! subjects pass through untouched so rebase --autosquash keeps matching.
+# main is closed to direct work: only Releasing: and merge subjects may be committed on it.
 
 MSG_FILE="$1"
 root="$(git rev-parse --show-toplevel)" || exit 1
 first_line="$(head -n 1 "$MSG_FILE")"
 
 case "$first_line" in
-  "✨ "*|"🐞 "*|"🚨 "*|"🔨 "*|"🔄 "*|"🔀 "*|"⏪ "*) emoji="" ;;
+  "✨ "*|"🐞 "*|"🚨 "*|"🔨 "*|"🔄 "*|"🔀 "*|"⏪ "*|"🚀 "*) emoji="" ;;
   "[feature/Eyrie-"*) emoji="✨" ;;
   "[bugfix/Eyrie-"*)  emoji="🐞" ;;
   "[hotfix/Eyrie-"*)  emoji="🚨" ;;
   "[Eyrie-"*)         emoji="✨" ;;
   "Refactor: "*)      emoji="🔨" ;;
   "Update: "*)        emoji="🔄" ;;
+  "Releasing: "*)     emoji="🚀" ;;
   "Merge branch "*|"Merge remote-tracking branch "*|"Merge tag "*|"Merge pull request "*) emoji="🔀" ;;
   'Revert "'*)        emoji="⏪" ;;
   *) emoji="" ;;
@@ -26,6 +28,18 @@ candidate="$first_line"
 [ -n "$emoji" ] && candidate="$emoji $first_line"
 
 echo '⏳... START COMMIT MESSAGE CHECKING ... ⏳'
+
+# main takes no direct work: releases (Releasing: -> 🚀) and merges only.
+# EYRIE_TEST_BRANCH lets the hook test table exercise both sides of the guard.
+branch="${EYRIE_TEST_BRANCH:-$(git symbolic-ref --quiet --short HEAD)}"
+if [ "$branch" = "main" ]; then
+  case "$candidate" in
+    "🚀 Releasing: "*|"🔀 "*|"Merge "*) ;;
+    *)
+      echo "❌ ERROR:: Direct commits to main are closed — branch off as feature/Eyrie-XX and open a PR. Only 'Releasing: v<version>' and merge commits may land on main." >&2
+      exit 1 ;;
+  esac
+fi
 
 # Validate before touching the file so a rejected message is never rewritten.
 sh "$root/Scripts/validate-commit-subject.sh" "$candidate"

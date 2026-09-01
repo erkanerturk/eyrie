@@ -16,10 +16,11 @@ if printf '%s\n' "$subject" | grep -q 'ç\|ğ\|ı\|ö\|ş\|ü\|Ç\|Ğ\|İ\|Ö\|�
   exit 2
 fi
 
-tag_regex='^(✨|🐞|🚨|🔨|🔄|🔀|⏪)? ?\[(feature/Eyrie-[0-9]{1,5}|bugfix/Eyrie-[0-9]{1,5}|hotfix/Eyrie-[0-9]{1,5}|Eyrie-[0-9]{1,5})\]: .+'
+tag_regex='^(✨|🐞|🚨|🔨|🔄|🔀|⏪|🚀)? ?\[(feature/Eyrie-[0-9]{1,5}|bugfix/Eyrie-[0-9]{1,5}|hotfix/Eyrie-[0-9]{1,5}|Eyrie-[0-9]{1,5})\]: .+'
 word_regex='^(🔨|🔄)? ?(Refactor|Update): .+'
+releasing_regex='^(🚀 )?Releasing: .+'
 merge_regex='^(🔀 )?Merge (branch|remote-tracking branch|tag|pull request) .+'
 revert_regex='^(⏪ )?Revert ".+'
 autosquash_regex='^(fixup|squash)! .+'
 
-printf '%s\n' "$subject" | grep -qE "$tag_regex|$word_regex|$merge_regex|$revert_regex|$autosquash_regex"
+printf '%s\n' "$subject" | grep -qE "$tag_regex|$word_regex|$releasing_regex|$merge_regex|$revert_regex|$autosquash_regex"
