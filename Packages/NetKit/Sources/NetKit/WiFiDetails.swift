@@ -117,17 +117,23 @@ extension LiveSSIDProvider {
         }
     }
 
-    private static func phyLabel(_ mode: CWPHYMode) -> String {
-        switch mode {
-        case .mode11a: "802.11a"
-        case .mode11b: "802.11b"
-        case .mode11g: "802.11g"
-        case .mode11n: "802.11n"
-        case .mode11ac: "802.11ac"
-        case .mode11ax: "802.11ax"
-        case .mode11be: "802.11be"
-        case .modeNone: ""
-        @unknown default: "Wi-Fi"
+    // Internal (not private) so the label table is unit-testable; nonisolated
+    // because it's a pure mapping with no actor state.
+    nonisolated static func phyLabel(_ mode: CWPHYMode) -> String {
+        // Raw values are the kCWPHYMode* constants from CoreWLANTypes.h. Matched
+        // numerically rather than by case name so 802.11be labels correctly even
+        // on SDK generations whose CWPHYMode enum omits the case (kCWPHYMode11be
+        // = 7 is doc-commented but absent from the enum body in some SDKs).
+        switch mode.rawValue {
+        case 0: ""
+        case 1: "802.11a"
+        case 2: "802.11b"
+        case 3: "802.11g"
+        case 4: "802.11n"
+        case 5: "802.11ac"
+        case 6: "802.11ax"
+        case 7: "802.11be"
+        default: "Wi-Fi"
         }
     }
 
