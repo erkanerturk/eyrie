@@ -192,7 +192,7 @@ public enum AwakePreset: Int, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .indefinite: "Indefinitely"
+        case .indefinite: "Infinity"
         case .minutes15: "15 minutes"
         case .minutes30: "30 minutes"
         case .hour1: "1 hour"
