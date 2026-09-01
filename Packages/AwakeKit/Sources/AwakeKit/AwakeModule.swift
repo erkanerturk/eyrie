@@ -41,9 +41,12 @@ public final class AwakeModule: EyrieModule {
     /// Periodically nudges the pointer while the user is idle so chat apps
     /// don't mark them away. Runs with the panel closed, so enable/disable
     /// goes through `setModuleEnabled(_:)`, not view lifecycle.
+    ///
+    /// Deliberately session-only (not persisted): like the Keep Awake switch,
+    /// it always comes back off after a relaunch — a feature that synthesizes
+    /// input must not silently resume itself.
     public var simulateActivity: Bool {
         didSet {
-            defaults.set(simulateActivity, forKey: Self.simulateActivityKey)
             syncSimulator()
             if simulateActivity, !hasAccessibilityTrust {
                 ActivitySimulator.promptForAccessibilityTrust()
@@ -74,7 +77,9 @@ public final class AwakeModule: EyrieModule {
 
     private static let presetKey = "awake.preset"
     private static let displaySleepKey = "awake.allowDisplaySleep"
-    private static let simulateActivityKey = "awake.simulateActivity"
+    /// Only used to clear the value written by ≤ v0.5.1, which persisted the
+    /// switch; see `simulateActivity`.
+    private static let legacySimulateActivityKey = "awake.simulateActivity"
     private static let activityIntervalKey = "awake.activityInterval"
 
     /// `defaults` and `trustCheck` are injectable so tests never write the
@@ -86,7 +91,8 @@ public final class AwakeModule: EyrieModule {
         hasAccessibilityTrust = trustCheck()
         selectedPreset = AwakePreset(rawValue: defaults.integer(forKey: Self.presetKey)) ?? .indefinite
         allowDisplaySleep = defaults.bool(forKey: Self.displaySleepKey)
-        simulateActivity = defaults.bool(forKey: Self.simulateActivityKey)
+        simulateActivity = false
+        defaults.removeObject(forKey: Self.legacySimulateActivityKey)
         let interval = AwakeActivityInterval(rawValue: defaults.integer(forKey: Self.activityIntervalKey)) ?? .minute1
         activityInterval = interval
         simulator = ActivitySimulator(interval: interval.seconds)

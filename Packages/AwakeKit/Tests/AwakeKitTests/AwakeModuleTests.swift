@@ -121,7 +121,33 @@ struct AwakeModuleTests {
         #expect(!module.isSimulatingActivity)
 
         module.setModuleEnabled(true)
-        #expect(module.isSimulatingActivity, "re-enable must restore the persisted preference")
+        #expect(module.isSimulatingActivity, "re-enable must restore the in-memory switch state")
+    }
+
+    @Test func simulateActivityIsSessionOnly() {
+        let defaults = makeDefaults()
+        let module = AwakeModule(defaults: defaults, trustCheck: { true })
+        module.setModuleEnabled(true)
+        module.simulateActivity = true
+        module.shutdown()
+
+        // A relaunch constructs a fresh module over the same defaults; the
+        // switch must come back off, like Keep Awake.
+        let relaunched = AwakeModule(defaults: defaults, trustCheck: { true })
+        relaunched.setModuleEnabled(true)
+        #expect(!relaunched.simulateActivity)
+        #expect(!relaunched.isSimulatingActivity)
+    }
+
+    @Test func legacyPersistedSwitchIsClearedAndIgnored() {
+        let defaults = makeDefaults()
+        defaults.set(true, forKey: "awake.simulateActivity") // written by ≤ v0.5.1
+
+        let module = AwakeModule(defaults: defaults, trustCheck: { true })
+        module.setModuleEnabled(true)
+        #expect(!module.simulateActivity, "the legacy value must not resurrect the switch")
+        #expect(!module.isSimulatingActivity)
+        #expect(defaults.object(forKey: "awake.simulateActivity") == nil, "the stale key is cleaned up")
     }
 
     @Test func shutdownStopsSimulatorAndStaysStopped() {
