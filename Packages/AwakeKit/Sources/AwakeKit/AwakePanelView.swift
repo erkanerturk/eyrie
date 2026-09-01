@@ -40,16 +40,16 @@ struct AwakePanelView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Toggle(isOn: $module.simulateActivity) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Simulate activity")
-                    Text("Nudges the pointer while you're idle so chat apps keep you available.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            // Same row shape as the card header (label, Spacer, bare switch)
+            // so this switch shares the header toggle's trailing column.
+            HStack {
+                Text("Simulate activity")
+                Spacer(minLength: 0)
+                Toggle("Simulate activity", isOn: $module.simulateActivity)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
             }
-            .toggleStyle(.switch)
-            .controlSize(.small)
 
             if module.simulateActivity, !module.hasAccessibilityTrust {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
