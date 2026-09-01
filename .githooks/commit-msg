@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+
+# Commit message validation + automatic emoji prefix by pattern (see CONTRIBUTING.md)
+# Pattern -> emoji: [feature/Eyrie-x] ✨ | [bugfix/Eyrie-x] 🐞 | [hotfix/Eyrie-x] 🚨 |
+#                   Refactor: 🔨 | Update: 🔄 | git-generated Merge 🔀 | Revert ⏪
+# fixup!/squash! subjects pass through untouched so rebase --autosquash keeps matching.
+
+MSG_FILE="$1"
+root="$(git rev-parse --show-toplevel)" || exit 1
+first_line="$(head -n 1 "$MSG_FILE")"
+
+case "$first_line" in
+  "✨ "*|"🐞 "*|"🚨 "*|"🔨 "*|"🔄 "*|"🔀 "*|"⏪ "*) emoji="" ;;
+  "[feature/Eyrie-"*) emoji="✨" ;;
+  "[bugfix/Eyrie-"*)  emoji="🐞" ;;
+  "[hotfix/Eyrie-"*)  emoji="🚨" ;;
+  "[Eyrie-"*)         emoji="✨" ;;
+  "Refactor: "*)      emoji="🔨" ;;
+  "Update: "*)        emoji="🔄" ;;
+  "Merge branch "*|"Merge remote-tracking branch "*|"Merge tag "*|"Merge pull request "*) emoji="🔀" ;;
+  'Revert "'*)        emoji="⏪" ;;
+  *) emoji="" ;;
+esac
+
+candidate="$first_line"
+[ -n "$emoji" ] && candidate="$emoji $first_line"
+
+echo '⏳... START COMMIT MESSAGE CHECKING ... ⏳'
+
+# Validate before touching the file so a rejected message is never rewritten.
+sh "$root/Scripts/validate-commit-subject.sh" "$candidate"
+case $? in
+  0) ;;
+  2) echo "❌ ERROR:: Commit subject must be written in ENGLISH (Turkish characters detected): $first_line" >&2
+     exit 1 ;;
+  *) echo "❌ ERROR:: Your commit message is missing a valid format like '[feature/Eyrie-XX]: message', '[bugfix/Eyrie-XX]: message', '[hotfix/Eyrie-XX]: message', '[Eyrie-XX]: message', 'Refactor: message', or 'Update: message'" >&2
+     exit 1 ;;
+esac
+
+if [ -n "$emoji" ]; then
+  tmp="$MSG_FILE.tmp"
+  { printf '%s\n' "$candidate"; tail -n +2 "$MSG_FILE"; } > "$tmp" && mv "$tmp" "$MSG_FILE"
+  echo "🎨 Emoji prefix added: $candidate"
+fi
+
+echo "🚀 COMMIT MESSAGE CHECK SUCCESSFUL 🚀"

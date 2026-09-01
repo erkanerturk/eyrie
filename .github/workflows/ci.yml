@@ -6,6 +6,32 @@ on:
   pull_request:
 
 jobs:
+  # The commit-msg hook is local and skippable (--no-verify); this job is the
+  # unbypassable version of the same check, via the same shared script.
+  commit-lint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate commit subjects
+        run: |
+          git log --no-merges --format=%s origin/${{ github.base_ref }}..HEAD | while IFS= read -r subject; do
+            echo "checking: $subject"
+            sh Scripts/validate-commit-subject.sh "$subject" || {
+              echo "::error::invalid commit subject: $subject"
+              exit 1
+            }
+          done
+
+  hook-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hook table tests
+        run: sh Scripts/test-hooks.sh
+
   build-and-test:
     # Liquid Glass APIs need the macOS 26 SDK / Xcode 26.
     runs-on: macos-26

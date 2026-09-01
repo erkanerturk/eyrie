@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+
+# Test only the packages changed by the outgoing commits — CI owns the full
+# sweep and the live smoke suites. Branch deletions and tag-only pushes are
+# skipped via the ref list git feeds on stdin.
+
+zero=0000000000000000000000000000000000000000
+ran=0
+
+while read -r local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue        # deleting a remote ref
+  case "$local_ref" in refs/tags/*) continue ;; esac
+
+  if [ "$remote_sha" = "$zero" ]; then
+    range="origin/main..$local_sha"             # new branch: compare to main
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  packages="$(git diff --name-only "$range" 2>/dev/null \
+    | sed -n 's|^Packages/\([^/]*\)/.*|\1|p' | sort -u)"
+
+  for pkg in $packages; do
+    [ -d "Packages/$pkg" ] || continue
+    echo "⏳ pre-push: swift test --package-path Packages/$pkg (live smoke suites skipped)"
+    swift test --package-path "Packages/$pkg" --skip LiveSmokeTests --skip LiveProviderSmokeTests || {
+      echo "❌ ERROR:: tests failed for Packages/$pkg — push aborted" >&2
+      exit 1
+    }
+    ran=1
+  done
+done
+
+if [ "$ran" = 1 ]; then
+  echo "🚀 pre-push: changed-package tests OK 🚀"
+else
+  echo "pre-push: no package changes to test"
+fi
+exit 0

@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+
+# Test every package that has staged changes before it can be committed.
+# Commits touching only files outside Packages/ skip the sweep. Deletion-only
+# changes are excluded (ACMR, plus the -d guard for renamed-away packages).
+#
+# Live smoke suites are skipped: they depend on the machine's environment
+# (network replies, live counters), so CI owns them — the local gate must be
+# green on any healthy machine. Note the tests compile the WORKING TREE, not
+# the staged index; with partial staging (git add -p) CI stays authoritative.
+
+set -e
+
+packages="$(git diff --cached --name-only --diff-filter=ACMR \
+  | sed -n 's|^Packages/\([^/]*\)/.*|\1|p' | sort -u)"
+
+[ -z "$packages" ] && exit 0
+
+for pkg in $packages; do
+  [ -d "Packages/$pkg" ] || continue
+  echo "⏳ pre-commit: swift test --package-path Packages/$pkg (live smoke suites skipped)"
+  swift test --package-path "Packages/$pkg" --skip LiveSmokeTests --skip LiveProviderSmokeTests || {
+    echo "❌ ERROR:: tests failed for Packages/$pkg — commit aborted" >&2
+    exit 1
+  }
+done
+
+echo "🚀 pre-commit: package tests OK 🚀"

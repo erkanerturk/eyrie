@@ -162,6 +162,7 @@ Network identity + status + quality card. An `NWPathMonitor` stream drives every
 
 ## Constraints & conventions for contributors
 
+- **Install the git hooks once** (`./Scripts/setup-hooks.sh`) and follow the `[Eyrie-XX]` commit pattern — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Don't edit `Eyrie.xcodeproj`** — change `project.yml` and regenerate.
 - **No sandbox, no App Store.** If you add a feature, you may use non-sandbox APIs, but keep anything private-API-shaped isolated in its own package like DisplayKit does.
 - **Swift 6 strict concurrency** is on. Modules are `@MainActor`; anything that talks to hardware slowly or serially (DDC) belongs in an actor; C callbacks must hop back explicitly.
