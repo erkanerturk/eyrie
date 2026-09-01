@@ -6,9 +6,10 @@ Release with it attached.
 
 1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in `project.yml`
    — the workflow fails if the version doesn't match the tag.
-2. Commit, tag, and push:
+2. Commit, tag, and push (the `Update:` prefix satisfies the commit-msg hook,
+   which stamps it 🔄):
    ```bash
-   git commit -am "Release v<version>"
+   git commit -am "Update: Release v<version>"
    git tag v<version>
    git push && git push --tags
    ```
