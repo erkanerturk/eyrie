@@ -47,10 +47,20 @@ Every commit subject follows the `[Eyrie-XX]` pattern, where `XX` is the GitHub 
 | `[Eyrie-12]: message` | ✨ `[Eyrie-12]: message` | Issue-linked work that fits no other bucket |
 | `Refactor: message` | 🔨 `Refactor: message` | Behavior-preserving restructuring |
 | `Update: message` | 🔄 `Update: message` | Docs, dependencies, chores |
+| `Releasing: v0.6.0` | 🚀 `Releasing: v0.6.0` | Version-bump commits when cutting a release |
 
 git-generated subjects are recognized as-is: `Merge branch/tag/pull request …` → 🔀, `Revert "…"` → ⏪, and `fixup!`/`squash!` pass through untouched so `rebase --autosquash` keeps matching.
 
 Subjects are **English only** — the hook rejects Turkish characters. Commits that address PR review feedback keep the same tag as the branch (e.g. review fixes on `bugfix/Eyrie-4` are still `[bugfix/Eyrie-4]: …`).
+
+## `main` is closed to direct work
+
+Everything reaches `main` through a PR. The hooks enforce it on both ends — `commit-msg` rejects committing on `main`, and `pre-push` rejects pushing stray commits to it — with exactly two exceptions:
+
+- 🚀 `Releasing: v<version>` version-bump commits (the release flow in [Docs/RELEASING.md](Docs/RELEASING.md))
+- Merge commits (PR merges, `git pull`)
+
+This is client-side; the matching server-side rule is a branch ruleset only a repo admin can add (require a pull request before merging on `main`).
 
 ## Branches
 
