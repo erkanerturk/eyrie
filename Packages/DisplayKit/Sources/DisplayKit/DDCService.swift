@@ -6,20 +6,34 @@ import IOKit
 // approach MonitorControl and m1ddc use. Not App Store safe by design.
 typealias IOAVServiceRef = CFTypeRef
 
-@_silgen_name("IOAVServiceCreateWithService")
-private func IOAVServiceCreateWithService(_ allocator: CFAllocator?, _ service: io_service_t) -> Unmanaged<IOAVServiceRef>?
+/// Resolved with `dlsym` rather than hard-linked via `@_silgen_name`: if a
+/// macOS update drops these private symbols, a hard link fails the whole app
+/// at launch, while this only turns DDC off. The `@convention(c)` types also
+/// give the calls the C ABI they actually have.
+enum IOAVService {
+    typealias CreateWithService = @convention(c) (CFAllocator?, io_service_t) -> Unmanaged<IOAVServiceRef>?
+    typealias TransferI2C = @convention(c) (IOAVServiceRef, UInt32, UInt32, UnsafeMutableRawPointer, UInt32) -> IOReturn
 
-@_silgen_name("IOAVServiceReadI2C")
-private func IOAVServiceReadI2C(
-    _ service: IOAVServiceRef, _ chipAddress: UInt32, _ offset: UInt32,
-    _ outputBuffer: UnsafeMutableRawPointer, _ outputBufferSize: UInt32
-) -> IOReturn
+    struct Functions: @unchecked Sendable {
+        let create: CreateWithService
+        let readI2C: TransferI2C
+        let writeI2C: TransferI2C
+    }
 
-@_silgen_name("IOAVServiceWriteI2C")
-private func IOAVServiceWriteI2C(
-    _ service: IOAVServiceRef, _ chipAddress: UInt32, _ dataAddress: UInt32,
-    _ inputBuffer: UnsafeMutableRawPointer, _ inputBufferSize: UInt32
-) -> IOReturn
+    /// Nil when any symbol is missing; DDC then reports no capable displays.
+    static let functions: Functions? = {
+        guard let iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY),
+              let create = dlsym(iokit, "IOAVServiceCreateWithService"),
+              let read = dlsym(iokit, "IOAVServiceReadI2C"),
+              let write = dlsym(iokit, "IOAVServiceWriteI2C")
+        else { return nil }
+        return Functions(
+            create: unsafeBitCast(create, to: CreateWithService.self),
+            readI2C: unsafeBitCast(read, to: TransferI2C.self),
+            writeI2C: unsafeBitCast(write, to: TransferI2C.self)
+        )
+    }()
+}
 
 /// Snapshot of one external display handed to the UI layer.
 struct DDCDisplayInfo: Identifiable, Sendable {
@@ -90,6 +104,7 @@ actor DDCService {
     }
 
     private func externalAVServices() -> [(edidUUID: String?, service: IOAVServiceRef)] {
+        guard let io = IOAVService.functions else { return [] }
         var result: [(String?, IOAVServiceRef)] = []
         var iterator = io_iterator_t()
         guard IOServiceGetMatchingServices(
@@ -102,7 +117,7 @@ actor DDCService {
         while case let entry = IOIteratorNext(iterator), entry != 0 {
             defer { IOObjectRelease(entry) }
             guard registryString(entry, key: "Location") == "External",
-                  let service = IOAVServiceCreateWithService(kCFAllocatorDefault, entry)?.takeRetainedValue()
+                  let service = io.create(kCFAllocatorDefault, entry)?.takeRetainedValue()
             else { continue }
             result.append((registryString(entry, key: "EDID UUID"), service))
         }
@@ -127,29 +142,29 @@ actor DDCService {
     }
 
     private func writeVCP(_ code: UInt8, value: Int, display: CGDirectDisplayID) {
-        guard let service = services[display] else { return }
+        guard let service = services[display], let io = IOAVService.functions else { return }
         var packet = DDCPacket.setVCP(code, value: value)
         _ = packet.withUnsafeMutableBytes { buffer in
-            IOAVServiceWriteI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
+            io.writeI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
         }
     }
 
     /// Blocks the actor for the reply delay (a plain `usleep`, not
     /// `Task.sleep`) so no other I2C transaction can interleave.
     private func readVCP(_ code: UInt8, display: CGDirectDisplayID) -> (current: Int, max: Int)? {
-        guard let service = services[display] else { return nil }
+        guard let service = services[display], let io = IOAVService.functions else { return nil }
         var request = DDCPacket.readRequest(code)
 
         for _ in 0..<3 {
             let wrote = request.withUnsafeMutableBytes { buffer in
-                IOAVServiceWriteI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
+                io.writeI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
             }
             guard wrote == kIOReturnSuccess else { continue }
             usleep(15_000)
 
             var reply = [UInt8](repeating: 0, count: 12)
             let read = reply.withUnsafeMutableBytes { buffer in
-                IOAVServiceReadI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
+                io.readI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
             }
             guard read == kIOReturnSuccess, let parsed = DDCPacket.parseReply(reply, code: code) else { continue }
             return parsed

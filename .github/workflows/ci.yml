@@ -5,21 +5,33 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   # The commit-msg hook is local and skippable (--no-verify); this job is the
-  # unbypassable version of the same check, via the same shared script.
+  # server-side version of the same check. It runs the *base* branch's copy of
+  # the shared script, so a PR can't loosen the rule it is judged by — mark it
+  # a required check in the ruleset to make it binding.
   commit-lint:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Validate commit subjects
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git log --no-merges --format=%s origin/${{ github.base_ref }}..HEAD | while IFS= read -r subject; do
+          validator="$RUNNER_TEMP/validate-commit-subject.sh"
+          git show "origin/$BASE_REF:Scripts/validate-commit-subject.sh" > "$validator"
+          git log --no-merges --format=%s "origin/$BASE_REF..HEAD" | while IFS= read -r subject; do
             echo "checking: $subject"
-            sh Scripts/validate-commit-subject.sh "$subject" || {
+            # </dev/null: the loop's stdin is the git log pipe; the validator
+            # must never read the next subject from it.
+            sh "$validator" "$subject" </dev/null || {
               echo "::error::invalid commit subject: $subject"
               exit 1
             }
@@ -28,7 +40,9 @@ jobs:
   hook-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Hook table tests
         run: sh Scripts/test-hooks.sh
 
@@ -36,7 +50,9 @@ jobs:
     # Liquid Glass APIs need the macOS 26 SDK / Xcode 26.
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Package tests
         run: |
@@ -46,9 +62,11 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Install xcodegen (pinned)
+        run: sh Scripts/install-xcodegen.sh
+
       - name: Build app
         run: |
-          brew install xcodegen
           xcodegen generate
           xcodebuild -project Eyrie.xcodeproj -scheme Eyrie \
             -configuration Debug build CODE_SIGNING_ALLOWED=NO

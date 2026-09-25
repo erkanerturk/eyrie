@@ -85,6 +85,13 @@ struct DDCPacketTests {
 /// Read-only smoke test against IOKit: with no displays requested, the DDC
 /// service must return nothing and touch nothing.
 struct DDCServiceTests {
+    /// Read-only: the private symbols still exist on this macOS, so DDC stays
+    /// available. If this fails after an OS update, DDC is gone but the app
+    /// still launches.
+    @Test func privateIOAVServiceSymbolsResolve() {
+        #expect(IOAVService.functions != nil)
+    }
+
     @Test func refreshWithNoDisplaysReturnsEmpty() async {
         let infos = await DDCService.shared.refresh(displays: [])
         #expect(infos.isEmpty)
