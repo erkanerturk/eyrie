@@ -21,13 +21,24 @@ public final class AudioShareModule: EyrieModule {
     private(set) var volumes: [String: Float] = [:]
 
     @ObservationIgnored private var aggregateID: AudioDeviceID?
-    @ObservationIgnored private var previousDefaultUID: String?
+    /// Persisted so a launch after a crash can restore it; see
+    /// `removeOrphanedAggregate`.
+    @ObservationIgnored private var previousDefaultUID: String? {
+        didSet { UserDefaults.standard.set(previousDefaultUID, forKey: "audioshare.previousDefault") }
+    }
 
     private static let aggregateUID = "com.erkanerturk.eyrie.audioshare"
 
     public init() {
         selectedUIDs = Set(UserDefaults.standard.stringArray(forKey: "audioshare.selected") ?? [])
         refreshDevices()
+        let savedDefaultUID = UserDefaults.standard.string(forKey: "audioshare.previousDefault")
+        Self.removeOrphanedAggregate(
+            uid: Self.aggregateUID,
+            restoreTo: devices.first { $0.uid == savedDefaultUID } ?? devices.first
+        )
+        // Observers don't fire in init; clear the handled crash record directly.
+        UserDefaults.standard.removeObject(forKey: "audioshare.previousDefault")
         CoreAudioSupport.observeDeviceListChanges { [weak self] in
             Task { @MainActor in self?.handleDeviceListChange() }
         }
@@ -124,6 +135,18 @@ public final class AudioShareModule: EyrieModule {
         participatingUIDs = []
         previousDefaultUID = nil
         isActive = false
+    }
+
+    /// A public aggregate outlives the process, and a crash or force-quit
+    /// skips `shutdown()` — so a leftover would stay the system output while
+    /// the panel shows sharing off. Same order as `stopSharing()`: move the
+    /// default output off it first, then destroy it.
+    nonisolated static func removeOrphanedAggregate(uid: String, restoreTo fallback: AudioOutputDevice?) {
+        guard let orphan = CoreAudioSupport.device(forUID: uid) else { return }
+        if CoreAudioSupport.defaultOutputDevice() == orphan, let fallback {
+            CoreAudioSupport.setDefaultOutputDevice(fallback.id)
+        }
+        CoreAudioSupport.destroyAggregateDevice(orphan)
     }
 
     private func restartSharing() {

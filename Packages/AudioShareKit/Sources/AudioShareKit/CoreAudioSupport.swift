@@ -110,6 +110,21 @@ enum CoreAudioSupport {
         stringProperty(of: device, selector: kAudioDevicePropertyDeviceUID)
     }
 
+    /// Looks a device up by UID, including aggregates; nil if none exists.
+    static func device(forUID uid: String) -> AudioDeviceID? {
+        var addr = address(kAudioHardwarePropertyTranslateUIDToDevice)
+        var qualifier = uid as CFString
+        var value = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = withUnsafePointer(to: &qualifier) { pointer in
+            AudioObjectGetPropertyData(
+                systemObject, &addr, UInt32(MemoryLayout<CFString>.size), pointer, &size, &value
+            )
+        }
+        guard status == noErr, value != kAudioObjectUnknown else { return nil }
+        return value
+    }
+
     // MARK: Aggregate (multi-output) device
 
     /// Creates a stacked (multi-output) aggregate from the given device UIDs.
