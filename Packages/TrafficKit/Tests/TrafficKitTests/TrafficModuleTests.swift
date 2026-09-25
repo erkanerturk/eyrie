@@ -37,6 +37,23 @@ struct TrafficModuleTests {
         #expect(module.topConsumers?[0].inPerSecond == 2000)
     }
 
+    @Test func reusedPidGetsTheNewProcessName() {
+        let module = makeModule()
+        // Pids no running app owns, so resolution falls back to nettop's name.
+        module.applyFrame([process(999_991, "old", in: 1, out: 0)])
+        #expect(module.topConsumers?[0].displayName == "old")
+
+        module.applyFrame([process(999_991, "new", in: 1, out: 0)])
+        #expect(module.topConsumers?[0].displayName == "new")
+    }
+
+    @Test func nameCacheOnlyKeepsLiveProcesses() {
+        let module = makeModule()
+        module.applyFrame([process(999_991, "a", in: 1, out: 0), process(999_992, "b", in: 1, out: 0)])
+        module.applyFrame([process(999_993, "c", in: 1, out: 0)])
+        #expect(module.displayNames.count == 1)
+    }
+
     @Test func nilOrEmptySampleMarksUnavailable() {
         let module = makeModule()
         module.applyFrame([process(1, "x", in: 1, out: 1)])

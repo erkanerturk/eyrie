@@ -38,6 +38,37 @@ struct DailyUsageTests {
         #expect(store.todayBytesOut == 100)
     }
 
+    /// Counters restarted at boot and already climbed past the persisted
+    /// baseline: regression alone can't see it, the boot time can.
+    @Test func rebootBetweenRunsRebaselinesEvenWithoutRegression() {
+        let defaults = temporaryDefaults()
+        let first = DailyUsageStore(defaults: defaults, bootTime: { 1_000 })
+        first.ingest([interface("en0", in: 10_000, out: 10_000)])
+        first.flush()
+
+        let afterReboot = DailyUsageStore(defaults: defaults, bootTime: { 5_000 })
+        afterReboot.ingest([interface("en0", in: 50_000, out: 50_000)])
+        #expect(afterReboot.todayBytesIn == 0)
+        #expect(afterReboot.todayBytesOut == 0)
+    }
+
+    @Test func sameBootKeepsBaselinesAcrossRuns() {
+        let defaults = temporaryDefaults()
+        let first = DailyUsageStore(defaults: defaults, bootTime: { 1_000 })
+        first.ingest([interface("en0", in: 10_000, out: 10_000)])
+        first.flush()
+
+        let relaunched = DailyUsageStore(defaults: defaults, bootTime: { 1_000.2 })
+        relaunched.ingest([interface("en0", in: 12_000, out: 10_500)])
+        #expect(relaunched.todayBytesIn == 2_000)
+        #expect(relaunched.todayBytesOut == 500)
+    }
+
+    @Test func liveBootTimeIsReadable() {
+        let boot = try! #require(DailyUsageStore.systemBootTime())
+        #expect(boot > 0 && boot < Date.now.timeIntervalSince1970)
+    }
+
     @Test func vanishingUtunDoesNotAffectOtherInterfaces() {
         let store = DailyUsageStore(defaults: temporaryDefaults())
         store.ingest([
