@@ -25,10 +25,24 @@ enum DDCPacket {
         return request
     }
 
+    /// Replies checksum against the host's virtual address 0x50.
+    private static let replyChecksumSeed: UInt8 = 0x50
+
     /// Parses a "Get VCP Feature" reply.
     /// Layout: [src][len][0x02][result][vcp][type][maxHi][maxLo][curHi][curLo][chk]
+    /// A non-zero result byte means "unsupported VCP code", and a bad checksum
+    /// means a corrupted transfer; neither carries a usable value.
     static func parseReply(_ reply: [UInt8], code: UInt8) -> (current: Int, max: Int)? {
-        guard reply.count >= 10, reply[2] == 0x02, reply[4] == code else { return nil }
+        guard reply.count >= 11, reply[2] == 0x02, reply[3] == 0x00, reply[4] == code,
+              reply[0..<10].reduce(replyChecksumSeed, ^) == reply[10]
+        else { return nil }
         return (Int(reply[8]) << 8 | Int(reply[9]), Int(reply[6]) << 8 | Int(reply[7]))
+    }
+
+    /// Current value as 0...100 percent of `max`, clamped so a display that
+    /// reports current > max can't push the slider out of range.
+    static func percent(current: Int, max: Int) -> Int {
+        guard max > 0 else { return 0 }
+        return Swift.min(Swift.max(current, 0), max) * 100 / max
     }
 }
