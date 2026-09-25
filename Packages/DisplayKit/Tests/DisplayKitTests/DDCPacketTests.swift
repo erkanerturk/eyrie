@@ -2,6 +2,11 @@ import Foundation
 import Testing
 @testable import DisplayKit
 
+/// Appends the reply checksum (0x50 XOR every byte) to a 10-byte body.
+private func signed(_ body: [UInt8]) -> [UInt8] {
+    body + [body.reduce(0x50, ^)]
+}
+
 struct DDCPacketTests {
     // Checksums seed with 0x6E ^ 0x51 = 0x3F (destination/source addresses
     // that IOAVService passes out-of-band).
@@ -24,27 +29,51 @@ struct DDCPacketTests {
 
     @Test func parseValidBrightnessReply() {
         // [src][len][op 0x02][result][vcp][type][maxHi][maxLo][curHi][curLo][chk]
-        let reply: [UInt8] = [0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32, 0x00]
+        let reply: [UInt8] = signed([0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32])
         let parsed = try! #require(DDCPacket.parseReply(reply, code: 0x10))
         #expect(parsed.current == 50)
         #expect(parsed.max == 100)
     }
 
     @Test func parseHandlesSixteenBitValues() {
-        let reply: [UInt8] = [0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0xFF, 0x00]
+        let reply: [UInt8] = signed([0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0xFF])
         let parsed = try! #require(DDCPacket.parseReply(reply, code: 0x10))
         #expect(parsed.current == 255)
         #expect(parsed.max == 256)
     }
 
     @Test func parseRejectsWrongOpcode() {
-        let reply: [UInt8] = [0x6E, 0x88, 0x03, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32, 0x00]
+        let reply: [UInt8] = signed([0x6E, 0x88, 0x03, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32])
         #expect(DDCPacket.parseReply(reply, code: 0x10) == nil)
     }
 
     @Test func parseRejectsMismatchedVCPCode() {
-        let reply: [UInt8] = [0x6E, 0x88, 0x02, 0x00, 0x12, 0x00, 0x00, 0x64, 0x00, 0x32, 0x00]
+        let reply: [UInt8] = signed([0x6E, 0x88, 0x02, 0x00, 0x12, 0x00, 0x00, 0x64, 0x00, 0x32])
         #expect(DDCPacket.parseReply(reply, code: 0x10) == nil)
+    }
+
+    @Test func parseRejectsUnsupportedResultCode() {
+        let reply = signed([0x6E, 0x88, 0x02, 0x01, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32])
+        #expect(DDCPacket.parseReply(reply, code: 0x10) == nil)
+    }
+
+    @Test func parseRejectsBadChecksum() {
+        var reply = signed([0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32])
+        reply[10] ^= 0xFF
+        #expect(DDCPacket.parseReply(reply, code: 0x10) == nil)
+    }
+
+    @Test func parseAcceptsTrailingPadding() {
+        // DDCService reads into a 12-byte buffer; the checksum sits at [10].
+        let reply = signed([0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32]) + [0x00]
+        #expect(DDCPacket.parseReply(reply, code: 0x10)?.current == 50)
+    }
+
+    @Test func percentIsClampedToRange() {
+        #expect(DDCPacket.percent(current: 50, max: 100) == 50)
+        #expect(DDCPacket.percent(current: 300, max: 100) == 100)
+        #expect(DDCPacket.percent(current: -5, max: 100) == 0)
+        #expect(DDCPacket.percent(current: 10, max: 0) == 0)
     }
 
     @Test func parseRejectsTruncatedReply() {

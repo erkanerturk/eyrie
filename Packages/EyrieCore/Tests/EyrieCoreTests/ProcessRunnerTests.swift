@@ -22,6 +22,17 @@ struct ProcessRunnerTests {
         }
     }
 
+    @Test func cancellationTerminatesTheChild() async {
+        let started = ContinuousClock.now
+        let task = Task {
+            try await ProcessRunner.run("/bin/sleep", arguments: ["30"], timeout: .seconds(60))
+        }
+        try? await Task.sleep(for: .milliseconds(200))
+        task.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        #expect(ContinuousClock.now - started < .seconds(5), "must not wait out the child or the timeout")
+    }
+
     @Test func launchFailureThrows() async {
         await #expect(throws: ProcessRunnerError.self) {
             _ = try await ProcessRunner.run("/nonexistent/binary")

@@ -71,9 +71,16 @@ public final class TrafficModule: EyrieModule {
     @ObservationIgnored private var latestRates: [ProcessTrafficRate] = []
     @ObservationIgnored private var previousFrame: [ProcessTraffic]?
     @ObservationIgnored private var previousFrameAt: Date?
-    /// pid → localized app name. Resolving this per row per render made the
-    /// panel do workspace lookups on every observable change.
-    @ObservationIgnored private var displayNames: [Int32: String] = [:]
+    /// (pid, nettop name) → localized app name. Resolving this per row per
+    /// render made the panel do workspace lookups on every observable change.
+    /// Keyed by name too so a reused pid can't inherit a dead process's name,
+    /// and pruned to the live frame so it can't grow for the app's lifetime.
+    @ObservationIgnored private(set) var displayNames: [ProcessKey: String] = [:]
+
+    struct ProcessKey: Hashable {
+        let pid: Int32
+        let name: String
+    }
     /// Injectable so tests never write through the toggles' `didSet` into the
     /// real app's preferences.
     @ObservationIgnored private let defaults: UserDefaults
@@ -176,6 +183,8 @@ public final class TrafficModule: EyrieModule {
         )
         previousFrame = frame
         previousFrameAt = now()
+        let live = Set(frame.map { ProcessKey(pid: $0.pid, name: $0.name) })
+        displayNames = displayNames.filter { live.contains($0.key) }
         recomputeTopConsumers()
     }
 
@@ -204,10 +213,11 @@ public final class TrafficModule: EyrieModule {
     }
 
     private func resolvedName(for row: ProcessTrafficRate) -> String {
-        if let cached = displayNames[row.pid] { return cached }
+        let key = ProcessKey(pid: row.pid, name: row.name)
+        if let cached = displayNames[key] { return cached }
         // nettop truncates to ~15 characters; the running app has a better one.
         let resolved = NSRunningApplication(processIdentifier: row.pid)?.localizedName ?? row.name
-        displayNames[row.pid] = resolved
+        displayNames[key] = resolved
         return resolved
     }
 

@@ -61,20 +61,24 @@ actor DDCService {
     /// Matches DCPAVServiceProxy registry entries to the given external
     /// displays (by EDID UUID, falling back to a 1:1 pairing) and reads the
     /// current brightness of each.
-    func refresh(displays: [(id: CGDirectDisplayID, name: String)]) async -> [DDCDisplayInfo] {
-        services.removeAll()
-
+    ///
+    /// Deliberately free of suspension points: the actor is reentrant across
+    /// an `await`, so a brightness write could otherwise land between a read
+    /// request and its reply, or hit a half-built `services` map.
+    func refresh(displays: [(id: CGDirectDisplayID, name: String)]) -> [DDCDisplayInfo] {
+        var matched: [CGDirectDisplayID: IOAVServiceRef] = [:]
         var avServices = externalAVServices()
         for display in displays {
             let uuid = Self.uuidString(for: display.id)
             if let index = avServices.firstIndex(where: { $0.edidUUID != nil && $0.edidUUID!.caseInsensitiveCompare(uuid ?? "") == .orderedSame }) {
-                services[display.id] = avServices.remove(at: index).service
+                matched[display.id] = avServices.remove(at: index).service
             }
         }
-        let unmatched = displays.filter { services[$0.id] == nil }
+        let unmatched = displays.filter { matched[$0.id] == nil }
         if unmatched.count == 1, avServices.count == 1 {
-            services[unmatched[0].id] = avServices[0].service
+            matched[unmatched[0].id] = avServices[0].service
         }
+        services = matched
 
         var infos: [DDCDisplayInfo] = []
         for display in displays {
@@ -82,13 +86,13 @@ actor DDCService {
                 infos.append(DDCDisplayInfo(id: display.id, name: display.name, supportsDDC: false, brightnessPercent: 50))
                 continue
             }
-            if let (current, max) = await readVCP(VCP.brightness, display: display.id), max > 0 {
+            if let (current, max) = readVCP(VCP.brightness, display: display.id), max > 0 {
                 maxValues[display.id] = max
                 infos.append(DDCDisplayInfo(
                     id: display.id,
                     name: display.name,
                     supportsDDC: true,
-                    brightnessPercent: current * 100 / max
+                    brightnessPercent: DDCPacket.percent(current: current, max: max)
                 ))
             } else {
                 // Writes may still work on monitors that reject reads.
@@ -145,7 +149,9 @@ actor DDCService {
         }
     }
 
-    private func readVCP(_ code: UInt8, display: CGDirectDisplayID) async -> (current: Int, max: Int)? {
+    /// Blocks the actor for the reply delay (a plain `usleep`, not
+    /// `Task.sleep`) so no other I2C transaction can interleave.
+    private func readVCP(_ code: UInt8, display: CGDirectDisplayID) -> (current: Int, max: Int)? {
         guard let service = services[display], let io = IOAVService.functions else { return nil }
         var request = DDCPacket.readRequest(code)
 
@@ -154,7 +160,7 @@ actor DDCService {
                 io.writeI2C(service, DDCPacket.chipAddress, DDCPacket.hostAddress, buffer.baseAddress!, UInt32(buffer.count))
             }
             guard wrote == kIOReturnSuccess else { continue }
-            try? await Task.sleep(for: .milliseconds(15))
+            usleep(15_000)
 
             var reply = [UInt8](repeating: 0, count: 12)
             let read = reply.withUnsafeMutableBytes { buffer in

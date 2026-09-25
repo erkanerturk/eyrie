@@ -4,8 +4,11 @@ import Foundation
 /// Per-day byte totals accumulated from interface counter observations.
 /// Deltas are tracked per interface name, so a VPN utun vanishing or a reboot
 /// (counter regression → rebaseline to the new value) never corrupts another
-/// interface's contribution. A delta spanning midnight is attributed to the
-/// day it is observed — a documented approximation, not a bug.
+/// interface's contribution. A reboot is also detected directly via
+/// `kern.boottime`: counters that restarted and already climbed past the
+/// persisted baseline would otherwise count as usage. A delta spanning
+/// midnight is attributed to the day it is observed — a documented
+/// approximation, not a bug.
 @MainActor
 @Observable
 public final class DailyUsageStore {
@@ -31,17 +34,42 @@ public final class DailyUsageStore {
 
     static let dailyKey = "traffic.dailyUsage"
     static let lastCountersKey = "traffic.lastCounters"
+    static let bootTimeKey = "traffic.bootTime"
     static let retentionDays = 60
     /// In-memory is the source of truth between flushes; encoding + writing
     /// two defaults keys on every tick was pure overhead.
     static let persistInterval: TimeInterval = 30
 
-    public init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
+    /// `bootTime` is injectable so tests can simulate a reboot between runs.
+    public init(
+        defaults: UserDefaults = .standard,
+        now: @escaping () -> Date = Date.init,
+        bootTime: () -> TimeInterval? = DailyUsageStore.systemBootTime
+    ) {
         self.defaults = defaults
         self.now = now
         daily = Self.decode([String: DayTotal].self, from: defaults, key: Self.dailyKey) ?? [:]
         lastCounters = Self.decode([String: CounterPair].self, from: defaults, key: Self.lastCountersKey) ?? [:]
+        // Baselines from another boot (or of unknown boot) describe counters
+        // that no longer exist. Tolerance absorbs clock-step jitter; a false
+        // positive only costs one baseline observation.
+        let currentBoot = bootTime()
+        let storedBoot = defaults.object(forKey: Self.bootTimeKey) as? TimeInterval
+        if let currentBoot, let storedBoot, abs(currentBoot - storedBoot) < 1 {
+            // Same boot — keep the baselines.
+        } else {
+            lastCounters = [:]
+        }
+        if let currentBoot { defaults.set(currentBoot, forKey: Self.bootTimeKey) }
         refreshToday()
+    }
+
+    /// Wall-clock boot time from `kern.boottime`, nil if unreadable.
+    public nonisolated static func systemBootTime() -> TimeInterval? {
+        var boot = timeval()
+        var size = MemoryLayout<timeval>.size
+        guard sysctlbyname("kern.boottime", &boot, &size, nil, 0) == 0 else { return nil }
+        return TimeInterval(boot.tv_sec) + TimeInterval(boot.tv_usec) / 1_000_000
     }
 
     public func ingest(_ counters: [InterfaceCounters]) {

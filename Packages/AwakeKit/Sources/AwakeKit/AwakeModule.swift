@@ -34,7 +34,9 @@ public final class AwakeModule: EyrieModule {
     public var allowDisplaySleep: Bool {
         didSet {
             defaults.set(allowDisplaySleep, forKey: Self.displaySleepKey)
-            if isActive { holdAssertion() }
+            // Only re-mode a running session: `isActive` also covers the
+            // simulator, which must never create an assertion of its own.
+            if isSessionActive { holdAssertion() }
         }
     }
 
@@ -72,7 +74,7 @@ public final class AwakeModule: EyrieModule {
     @ObservationIgnored private let simulator: ActivitySimulator
     @ObservationIgnored private let trustCheck: () -> Bool
     /// The registry calls `setModuleEnabled(_:)` at launch, so the simulator
-    /// stays parked until then even when the preference is on.
+    /// stays parked until then even if the switch was flipped before it.
     @ObservationIgnored private var isModuleEnabled = false
 
     private static let presetKey = "awake.preset"

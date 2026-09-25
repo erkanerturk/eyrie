@@ -337,7 +337,9 @@ public final class NetModule: EyrieModule {
         firewallTask = Task { [weak self] in
             guard let provider = self?.firewallProvider else { return }
             let state = await provider.currentState()
-            guard let self else { return }
+            // shutdown() cancels (end() doesn't): a disabled module takes no
+            // late writes, and a newer task's handle is never cleared.
+            guard let self, !Task.isCancelled else { return }
             // Deliberately not cancelled by end(): this is a short, read-only
             // check, and letting it land fills the cache for the next open.
             firewallState = state
@@ -357,7 +359,7 @@ public final class NetModule: EyrieModule {
         reachabilityTask = Task { [weak self] in
             guard let checker = self?.captiveChecker else { return }
             let result = await checker.check()
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             reachability = result
             reachabilityCheckedAt = now()
             reachabilityTask = nil
@@ -413,7 +415,7 @@ public final class NetModule: EyrieModule {
         exposedServicesTask = Task { [weak self] in
             guard let provider = self?.exposedServicesProvider else { return }
             let services = await provider.currentServices()
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             exposedServices = services
             exposedServicesCheckedAt = now()
             exposedServicesTask = nil
@@ -445,13 +447,15 @@ public final class NetModule: EyrieModule {
     /// Deliberately reads Wi-Fi/VPN state itself rather than the panel's
     /// published `wifiDetails`/`vpnStatus` — those are only populated while
     /// the panel monitor is running, but this must work with it closed.
-    private func evaluateInsecureNetworkWarning(for snapshot: NetworkSnapshot) async {
-        guard snapshot.kind == .wifi, let interfaceName = snapshot.interfaceName else {
+    func evaluateInsecureNetworkWarning(for snapshot: NetworkSnapshot) async {
+        guard snapshot.kind == .wifi, snapshot.interfaceName != nil else {
             hasWarnedForCurrentInsecureState = false
             return
         }
         let wifi = resolvedSSIDProvider().currentWiFiDetails()
-        let vpn = vpnProvider.currentStatus(primaryInterface: interfaceName)
+        // SCDynamicStore's primary interface, like the panel — the NWPath
+        // interface is the Wi-Fi NIC even under a full tunnel.
+        let vpn = vpnProvider.currentStatus(primaryInterface: configProvider.currentConfig()?.primaryInterface)
         guard InsecureNetworkNotifier.shouldWarn(wifi: wifi, vpn: vpn) else {
             hasWarnedForCurrentInsecureState = false
             return
