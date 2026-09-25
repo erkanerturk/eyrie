@@ -24,9 +24,10 @@ struct NetPanelView: View {
             if module.showSecurityWarnings, !module.securityFindings.isEmpty {
                 securitySection
             }
-            CopyableRow(label: "Local IP", value: module.snapshot?.displayLocalIP)
+            CopyableRow(label: "Local IP", value: module.snapshot?.displayLocalIP,
+                        masksUntilHover: true)
             CopyableRow(label: "External IP", value: module.externalIP,
-                        isLoading: module.isFetchingExternalIP)
+                        isLoading: module.isFetchingExternalIP, masksUntilHover: true)
             if module.showDNS, let config = module.config, !config.dnsServers.isEmpty {
                 dnsRow(config)
             }
@@ -168,8 +169,13 @@ private struct CopyableRow: View {
     var label: String
     var value: String?
     var isLoading = false
+    /// Keeps the value unreadable (screen sharing, shoulder surfing) until the
+    /// pointer is over the row. A mask rather than a blur: a blurred smudge
+    /// pulls the eye, bullets read as calm text. Copying still gets the real value.
+    var masksUntilHover = false
 
     @State private var copied = false
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -181,7 +187,7 @@ private struct CopyableRow: View {
                 ProgressView()
                     .controlSize(.mini)
             }
-            Text(value ?? "—")
+            Text(displayedValue)
                 .font(.caption.weight(.medium))
                 .monospaced()
                 .lineLimit(1)
@@ -197,6 +203,13 @@ private struct CopyableRow: View {
             // instead of letting its padding push it off-column.
             .frame(width: NetPanelView.trailingSlotWidth)
         }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+
+    private var displayedValue: String {
+        guard let value else { return "—" }
+        return masksUntilHover && !isHovering ? IPAddressMask.mask(value) : value
     }
 
     private func copy() {
