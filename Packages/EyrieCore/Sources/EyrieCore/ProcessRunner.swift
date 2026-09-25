@@ -64,24 +64,32 @@ public enum ProcessRunner {
         }
         defer { watchdog.cancel() }
 
-        // Drain both pipes while the child runs; a child that fills a pipe
-        // buffer before exiting would otherwise deadlock against readToEnd.
-        async let stdoutData = readToEnd(stdout.fileHandleForReading)
-        async let stderrData = readToEnd(stderr.fileHandleForReading)
+        // A cancelled caller (e.g. a module shutting down) must not leave the
+        // child running until the timeout; SIGTERM ends it, and the waits
+        // below then finish on their own.
+        let output = await withTaskCancellationHandler {
+            // Drain both pipes while the child runs; a child that fills a pipe
+            // buffer before exiting would otherwise deadlock against readToEnd.
+            async let stdoutData = readToEnd(stdout.fileHandleForReading)
+            async let stderrData = readToEnd(stderr.fileHandleForReading)
 
-        var status: Int32 = -1
-        for await exitStatus in exitEvents {
-            status = exitStatus
+            var status: Int32 = -1
+            for await exitStatus in exitEvents {
+                status = exitStatus
+            }
+            return await ProcessOutput(
+                terminationStatus: status,
+                standardOutput: String(data: stdoutData, encoding: .utf8) ?? "",
+                standardError: String(data: stderrData, encoding: .utf8) ?? ""
+            )
+        } onCancel: {
+            child.value.terminate()
         }
-        let output = await ProcessOutput(
-            terminationStatus: status,
-            standardOutput: String(data: stdoutData, encoding: .utf8) ?? "",
-            standardError: String(data: stderrData, encoding: .utf8) ?? ""
-        )
 
         if timedOut.withLock({ $0 }) {
             throw ProcessRunnerError.timedOut
         }
+        try Task.checkCancellation()
         return output
     }
 
