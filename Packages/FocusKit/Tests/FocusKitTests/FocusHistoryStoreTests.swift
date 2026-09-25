@@ -3,9 +3,11 @@ import Testing
 @testable import FocusKit
 
 @MainActor
-struct FocusHistoryStoreTests {
+final class FocusHistoryStoreTests {
     private let fileURL = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString + ".json")
+
+    deinit { try? FileManager.default.removeItem(at: fileURL) }
 
     private func session(endingDaysAgo days: Int, duration: TimeInterval = 1500) -> FocusSession {
         let end = Calendar.current.date(byAdding: .day, value: -days, to: .now)!

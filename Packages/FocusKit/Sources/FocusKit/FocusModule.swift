@@ -59,7 +59,11 @@ public final class FocusModule: EyrieModule {
         didSet { defaults.set(sessionsBeforeLongBreak, forKey: "focus.sessionsBeforeLongBreak") }
     }
     public var keepAwakeDuringFocus: Bool {
-        didSet { defaults.set(keepAwakeDuringFocus, forKey: "focus.keepAwake") }
+        didSet {
+            defaults.set(keepAwakeDuringFocus, forKey: "focus.keepAwake")
+            // Apply to the running phase now, not at the next transition.
+            if isActive { holdAssertionIfNeeded() }
+        }
     }
 
     // MARK: History
@@ -216,7 +220,9 @@ public final class FocusModule: EyrieModule {
     }
 
     private func holdAssertionIfNeeded() {
-        if phase == .focus && keepAwakeDuringFocus && !isPaused {
+        // `phase` stays `.focus` while the next phase is pending, so the
+        // pending check is what keeps a parked phase from holding it.
+        if phase == .focus && keepAwakeDuringFocus && !isPaused && pendingPhase == nil {
             PowerAssertionService.shared.hold(
                 token: id,
                 mode: .preventDisplaySleep,
