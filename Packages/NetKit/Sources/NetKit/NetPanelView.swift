@@ -24,10 +24,12 @@ struct NetPanelView: View {
             if module.showSecurityWarnings, !module.securityFindings.isEmpty {
                 securitySection
             }
-            CopyableRow(label: "Local IP", value: module.snapshot?.displayLocalIP,
-                        masksUntilHover: true)
-            CopyableRow(label: "External IP", value: module.externalIP,
-                        isLoading: module.isFetchingExternalIP, masksUntilHover: true)
+            if module.showIPAddresses {
+                CopyableRow(label: "Local IP", value: module.snapshot?.displayLocalIP,
+                            masksUntilHover: true)
+                CopyableRow(label: "External IP", value: module.externalIP,
+                            isLoading: module.isFetchingExternalIP, masksUntilHover: true)
+            }
             if module.showDNS, let config = module.config, !config.dnsServers.isEmpty {
                 dnsRow(config)
             }
