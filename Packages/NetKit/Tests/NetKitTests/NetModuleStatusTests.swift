@@ -68,6 +68,32 @@ struct NetModuleStatusTests {
         #expect(harness.module.reachability == .fullInternet)
     }
 
+    /// `shutdown()` cancels the probes; a cancelled one that finishes late
+    /// must not write state into a disabled module.
+    @Test func cancelledProbesDoNotLandAfterShutdown() async {
+        let harness = makeHarness()
+        harness.module.showSecurityWarnings = true
+        harness.module.apply(wifiSnapshot())
+        let firewall = harness.module.firewallTask
+        let reachability = harness.module.reachabilityTask
+        harness.module.shutdown()
+
+        await firewall?.value
+        await reachability?.value
+        #expect(harness.module.firewallState == nil)
+        #expect(harness.module.reachability == nil)
+        #expect(harness.module.exposedServicesTask == nil, "a late probe must not kick off a new scan")
+    }
+
+    /// The panel asks about SCDynamicStore's primary interface; the notifier
+    /// must too, or a raw-utun full tunnel is invisible and it warns falsely.
+    @Test func insecureNetworkCheckAsksAboutThePrimaryInterface() async {
+        let harness = makeHarness(config: SystemNetworkConfig(primaryInterface: "utun4"),
+                                  ssid: StubSSIDProvider(status: .authorized, details: stubWiFiDetails(isOpen: true)))
+        await harness.module.evaluateInsecureNetworkWarning(for: wifiSnapshot(interface: "en0"))
+        #expect(harness.vpnProvider.askedInterfaces == ["utun4"])
+    }
+
     /// The bug this replaced: both checks shared one task, so the instant
     /// firewall read waited on the network probe and was lost with it.
     @Test func firewallLandsIndependentlyOfASlowCaptiveCheck() async {
