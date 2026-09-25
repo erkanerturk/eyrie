@@ -2,12 +2,15 @@
 
 # Validates one commit subject against the Eyrie pattern (see CONTRIBUTING.md).
 # Shared by .githooks/commit-msg and CI's commit-lint job so the two can't drift.
-# Usage: validate-commit-subject.sh "subject"   (or pipe the subject via stdin)
+# Usage: validate-commit-subject.sh "subject"
+# No stdin fallback: CI calls this inside a `git log | while read` loop, where
+# an empty subject would otherwise swallow — and skip — the next one.
 # Exit codes: 0 valid, 1 wrong shape, 2 Turkish characters (subjects are English-only)
 
 export LC_ALL=en_US.UTF-8
 
-subject="${1:-$(head -n 1)}"
+[ "$#" -eq 1 ] || { echo "usage: $0 \"subject\"" >&2; exit 1; }
+subject="$1"
 
 # Alternation, not a bracket class: alternation matches whole byte sequences,
 # so it stays correct even if the environment degrades the locale to C

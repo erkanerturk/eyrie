@@ -84,5 +84,14 @@ else
   echo "FAIL: LC_ALL=C false positive -> $(head -n 1 "$tmp")"
 fi
 
+# The validator never reads stdin: an empty subject is rejected even when a
+# valid one is waiting on the pipe (CI's `git log | while read` loop).
+if printf '%s\n' '[feature/Eyrie-3]: next subject' | sh Scripts/validate-commit-subject.sh '' >/dev/null 2>&1; then
+  fail=$((fail + 1))
+  echo "FAIL: empty subject validated against stdin"
+else
+  pass=$((pass + 1))
+fi
+
 echo "hook tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

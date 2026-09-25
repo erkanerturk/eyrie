@@ -10,10 +10,25 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history so the tag can be checked against main below.
+          fetch-depth: 0
+          # The contents:write token must not sit in .git/config for the build.
+          persist-credentials: false
 
-      - name: Install xcodegen
-        run: brew install xcodegen
+      # Tag pushes skip the PR gate, so refuse to ship a commit main never
+      # reviewed. This catches mistakes; a v* tag ruleset is what stops a
+      # writer who also edits this file on the tagged commit.
+      - name: Check tag is on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main"
+            exit 1
+          }
+
+      - name: Install xcodegen (pinned)
+        run: sh Scripts/install-xcodegen.sh
 
       - name: Check version matches tag
         run: |
