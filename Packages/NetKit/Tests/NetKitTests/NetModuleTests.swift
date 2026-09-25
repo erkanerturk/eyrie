@@ -194,4 +194,16 @@ struct NetModuleTests {
         module.showSSID = false
         #expect(module.ssid == nil)
     }
+
+    // MARK: - IP visibility
+
+    @Test func ipAddressesShownByDefaultAndTogglePersists() {
+        let defaults = temporaryDefaults()
+        let module = NetModule(externalIPFetcher: ScriptedFetcher(), defaults: defaults)
+        #expect(module.showIPAddresses == true)
+
+        module.showIPAddresses = false
+        let reloaded = NetModule(externalIPFetcher: ScriptedFetcher(), defaults: defaults)
+        #expect(reloaded.showIPAddresses == false)
+    }
 }

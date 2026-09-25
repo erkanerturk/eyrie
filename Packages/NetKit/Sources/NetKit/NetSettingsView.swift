@@ -7,6 +7,10 @@ struct NetSettingsView: View {
     var body: some View {
         Form {
             Section("Status") {
+                Toggle("Show IP addresses", isOn: $module.showIPAddresses)
+                Text("Local and external IP stay masked until you hover over them. Turning this off also stops the external IP lookup.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Show status badges", isOn: $module.showStatusBadges)
                 Text("Connection type, VPN, firewall and connectivity are checked only while the panel is open, at most once a minute.")
                     .font(.caption)

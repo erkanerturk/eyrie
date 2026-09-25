@@ -62,6 +62,14 @@ public final class NetModule: EyrieModule {
     public var showDNS: Bool {
         didSet { defaults.set(showDNS, forKey: Self.showDNSKey) }
     }
+    /// Hides the Local/External IP rows. Off also skips the external IP
+    /// fetch — no point calling out for a value nobody sees.
+    public var showIPAddresses: Bool {
+        didSet {
+            defaults.set(showIPAddresses, forKey: Self.showIPAddressesKey)
+            if showIPAddresses, monitorTask != nil { refreshExternalIPIfNeeded() }
+        }
+    }
     public var showWiFiDetails: Bool {
         didSet {
             defaults.set(showWiFiDetails, forKey: Self.showWiFiDetailsKey)
@@ -140,6 +148,7 @@ public final class NetModule: EyrieModule {
     private static let showSSIDKey = "net.showSSID"
     private static let showStatusBadgesKey = "net.showStatusBadges"
     private static let showDNSKey = "net.showDNS"
+    private static let showIPAddressesKey = "net.showIPAddresses"
     private static let showWiFiDetailsKey = "net.showWiFiDetails"
     private static let showQualityKey = "net.showQuality"
     private static let showSecurityWarningsKey = "net.showSecurityWarnings"
@@ -177,6 +186,7 @@ public final class NetModule: EyrieModule {
         showSSID = defaults.object(forKey: Self.showSSIDKey) as? Bool ?? false
         showStatusBadges = defaults.object(forKey: Self.showStatusBadgesKey) as? Bool ?? true
         showDNS = defaults.object(forKey: Self.showDNSKey) as? Bool ?? true
+        showIPAddresses = defaults.object(forKey: Self.showIPAddressesKey) as? Bool ?? true
         showWiFiDetails = defaults.object(forKey: Self.showWiFiDetailsKey) as? Bool ?? false
         showQuality = defaults.object(forKey: Self.showQualityKey) as? Bool ?? true
         showSecurityWarnings = defaults.object(forKey: Self.showSecurityWarningsKey) as? Bool ?? true
@@ -475,6 +485,7 @@ public final class NetModule: EyrieModule {
     }
 
     private func refreshExternalIPIfNeeded() {
+        guard showIPAddresses else { return }
         guard let snapshot, snapshot.kind != .offline else { return }
         guard externalIPTask == nil else { return }
         if externalIP != nil, let fetchedAt = externalIPFetchedAt,

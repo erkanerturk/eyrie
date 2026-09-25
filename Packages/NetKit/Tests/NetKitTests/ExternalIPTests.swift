@@ -26,6 +26,17 @@ struct IPValidatorTests {
 
 @MainActor
 struct ExternalIPCacheTests {
+    @Test func hiddenIPAddressesSkipTheFetch() async {
+        let fetcher = ScriptedFetcher()
+        let module = NetModule(externalIPFetcher: fetcher, defaults: temporaryDefaults())
+        module.showIPAddresses = false
+
+        module.apply(wifiSnapshot())
+        #expect(module.externalIPTask == nil)
+        #expect(module.externalIP == nil)
+        #expect(fetcher.fetchCount == 0)
+    }
+
     @Test func fetchesOnceWithinTTLAcrossPanelReopens() async {
         let fetcher = ScriptedFetcher([.success("81.2.69.142"), .success("81.2.69.200")])
         let clock = FakeClock()
