@@ -61,12 +61,15 @@ check reject 'Merge the two parsers into one function'
 check reject 'bad message with no pattern'
 check reject '[feature/Eyrie-]: missing number'
 check reject 'releasing: lowercase variant'
+check reject 'Releasing: next version'
+check reject 'Releasing: v1.2'
 
 # main takes no direct work: releases and merges only
 EYRIE_TEST_BRANCH="main"
 check reject '[feature/Eyrie-9]: work committed on main'
 check reject 'Update: docs edited on main'
 check ok 'Releasing: v9.9.9'                        '🚀 Releasing: v9.9.9'
+check reject 'Releasing: sneak a fix onto main'
 check ok "Merge branch 'main' of github.com:erkanerturk/eyrie" "🔀 Merge branch 'main' of github.com:erkanerturk/eyrie"
 EYRIE_TEST_BRANCH="feature/Eyrie-0"
 
