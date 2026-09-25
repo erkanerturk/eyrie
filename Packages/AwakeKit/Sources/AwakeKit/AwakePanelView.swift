@@ -50,6 +50,10 @@ struct AwakePanelView: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
             }
+            Text("Nudges the pointer after \(module.activityInterval.label) idle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
 
             if module.simulateActivity, !module.hasAccessibilityTrust {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
