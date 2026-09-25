@@ -215,4 +215,17 @@ struct AwakeModuleTests {
         module.stop()
         #expect(!PowerAssertionService.shared.isHoldingAssertion)
     }
+
+    @Test func togglingDisplaySleepWhileOnlySimulatingHoldsNoAssertion() {
+        let module = makeModule()
+        defer { module.setModuleEnabled(false) }
+        module.setModuleEnabled(true)
+        module.simulateActivity = true
+        #expect(module.isActive)
+
+        module.allowDisplaySleep.toggle()
+        #expect(!PowerAssertionService.shared.isHoldingAssertion,
+                "only a Keep Awake session may hold the assertion")
+        #expect(!module.isSessionActive)
+    }
 }
