@@ -51,6 +51,40 @@ struct CoreAudioSupportTests {
         #expect(CoreAudioSupport.defaultOutputDevice() == defaultBefore, "default output must be untouched")
     }
 
+    @Test func deviceLookupByUID() throws {
+        #expect(CoreAudioSupport.device(forUID: "com.erkanerturk.eyrie.test.missing") == nil)
+        let anyOutput = try #require(CoreAudioSupport.outputDevices().first)
+        #expect(CoreAudioSupport.device(forUID: anyOutput.uid) == anyOutput.id)
+    }
+
+    /// coreaudiod publishes and removes aggregates asynchronously (~50 ms
+    /// measured), so UID lookups right after create/destroy must poll.
+    private func lookUp(_ uid: String, untilPresent present: Bool) -> AudioDeviceID? {
+        var device = CoreAudioSupport.device(forUID: uid)
+        for _ in 0..<40 where (device != nil) != present {
+            usleep(50_000)
+            device = CoreAudioSupport.device(forUID: uid)
+        }
+        return device
+    }
+
+    /// A leftover aggregate that isn't the default output is simply removed;
+    /// the default output is never touched.
+    @Test func orphanedAggregateIsRemoved() throws {
+        let defaultBefore = CoreAudioSupport.defaultOutputDevice()
+        let anyOutput = try #require(CoreAudioSupport.outputDevices().first)
+        let uid = "com.erkanerturk.eyrie.test.\(UUID().uuidString)"
+        let aggregate = try #require(CoreAudioSupport.createMultiOutputDevice(
+            name: "Eyrie Test Aggregate", uid: uid, deviceUIDs: [anyOutput.uid]
+        ))
+        defer { CoreAudioSupport.destroyAggregateDevice(aggregate) }
+        #expect(lookUp(uid, untilPresent: true) == aggregate)
+
+        AudioShareModule.removeOrphanedAggregate(uid: uid, restoreTo: nil)
+        #expect(lookUp(uid, untilPresent: false) == nil)
+        #expect(CoreAudioSupport.defaultOutputDevice() == defaultBefore, "default output must be untouched")
+    }
+
     @Test func emptyAggregateIsRejected() {
         #expect(CoreAudioSupport.createMultiOutputDevice(name: "x", uid: "y", deviceUIDs: []) == nil)
     }

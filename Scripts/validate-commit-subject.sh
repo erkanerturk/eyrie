@@ -18,7 +18,7 @@ fi
 
 tag_regex='^(✨|🐞|🚨|🔨|🔄|🔀|⏪|🚀)? ?\[(feature/Eyrie-[0-9]{1,5}|bugfix/Eyrie-[0-9]{1,5}|hotfix/Eyrie-[0-9]{1,5}|Eyrie-[0-9]{1,5})\]: .+'
 word_regex='^(🔨|🔄)? ?(Refactor|Update): .+'
-releasing_regex='^(🚀 )?Releasing: .+'
+releasing_regex='^(🚀 )?Releasing: v[0-9]+\.[0-9]+\.[0-9]+$'
 merge_regex='^(🔀 )?Merge (branch|remote-tracking branch|tag|pull request) .+'
 revert_regex='^(⏪ )?Revert ".+'
 autosquash_regex='^(fixup|squash)! .+'

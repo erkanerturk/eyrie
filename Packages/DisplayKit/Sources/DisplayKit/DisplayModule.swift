@@ -21,8 +21,12 @@ public final class DisplayModule: EyrieModule {
     private(set) var displays: [DisplayState] = []
     private(set) var isRefreshing = false
 
-    public init() {
-        refresh()
+    public init() {}
+
+    /// Pre-warms the display list at launch so the first panel open isn't
+    /// empty — but only when enabled; a disabled module touches no I2C.
+    public func setModuleEnabled(_ enabled: Bool) {
+        if enabled { refresh() }
     }
 
     func refresh() {

@@ -4,12 +4,18 @@ import EyrieCore
 @testable import FocusKit
 
 @MainActor
-struct FocusModuleTests {
+final class FocusModuleTests {
+    /// One directory per test instance, removed in `deinit`, so history
+    /// files never pile up in the temp dir.
+    private let directory = FileManager.default.temporaryDirectory
+        .appending(path: "FocusModuleTests-" + UUID().uuidString)
+
+    deinit { try? FileManager.default.removeItem(at: directory) }
+
     /// Module with an isolated on-disk history and no power assertions, so
     /// tests never touch the real session history or system sleep state.
     private func makeModule(sessionsBeforeLongBreak: Int = 4) -> FocusModule {
-        let fileURL = FileManager.default.temporaryDirectory
-            .appending(path: UUID().uuidString + ".json")
+        let fileURL = directory.appending(path: UUID().uuidString + ".json")
         let module = FocusModule(history: FocusHistoryStore(fileURL: fileURL))
         module.keepAwakeDuringFocus = false
         module.focusMinutes = 25
@@ -107,6 +113,29 @@ struct FocusModuleTests {
 
         module.advance(completedNaturally: true)
         #expect(!PowerAssertionService.shared.isHoldingAssertion, "pending state must release the assertion")
+    }
+
+    @Test func togglingKeepAwakeMidPhaseAppliesImmediately() {
+        let module = makeModule()
+        module.start()
+        defer { module.stop() }
+        #expect(!PowerAssertionService.shared.isHoldingAssertion)
+
+        module.keepAwakeDuringFocus = true
+        #expect(PowerAssertionService.shared.isHoldingAssertion)
+        module.keepAwakeDuringFocus = false
+        #expect(!PowerAssertionService.shared.isHoldingAssertion)
+    }
+
+    @Test func togglingKeepAwakeWhilePendingHoldsNoAssertion() {
+        let module = makeModule()
+        module.start()
+        defer { module.stop() }
+        module.advance(completedNaturally: true)
+        #expect(module.pendingPhase != nil)
+
+        module.keepAwakeDuringFocus = true
+        #expect(!PowerAssertionService.shared.isHoldingAssertion, "a parked phase is not a running focus phase")
     }
 
     @Test func naturalLongBreakWaitsAfterConfiguredSessions() {
